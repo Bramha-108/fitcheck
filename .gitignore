@@ -39,3 +39,15 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# local signing (never commit)
+/keystore/
+keystore.properties
+
+# build artifacts
+*.apk
+*.aab
+
+# QA/debug tooling output (screenshots, browser automation logs)
+.qa-screenshots/
+.playwright-mcp/
