@@ -51,3 +51,6 @@ keystore.properties
 # QA/debug tooling output (screenshots, browser automation logs)
 .qa-screenshots/
 .playwright-mcp/
+
+# internal audit doc (kept locally, not for public release)
+/AUDIT_REPORT.md
