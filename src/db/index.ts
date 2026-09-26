@@ -15,6 +15,33 @@ const SCHEMA_VERSION = 4;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
+/**
+ * Every exported read/write below goes through this so a SQLite failure (disk
+ * full, corrupt row, closed connection) always surfaces as a `DbError` naming
+ * which operation failed — a defensive contract this module owns itself,
+ * rather than leaving every call site responsible for remembering to catch
+ * (today they all do, in store.tsx, but that was never guaranteed here).
+ */
+export class DbError extends Error {
+  readonly operation: string;
+  readonly cause: unknown;
+
+  constructor(operation: string, cause: unknown) {
+    super(`Database operation "${operation}" failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = 'DbError';
+    this.operation = operation;
+    this.cause = cause;
+  }
+}
+
+async function withDbError<T>(operation: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    throw new DbError(operation, e);
+  }
+}
+
 interface GarmentRow {
   id: number;
   brand: string;
@@ -122,12 +149,12 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
-    dbPromise = (async () => {
+    dbPromise = withDbError('getDb', async () => {
       const db = await SQLite.openDatabaseAsync(DB_NAME);
       await db.execAsync('PRAGMA journal_mode = WAL;');
       await migrate(db);
       return db;
-    })();
+    });
   }
   return dbPromise;
 }
@@ -164,17 +191,19 @@ function rowToObservation(r: ObservationRow): FitObservation {
 }
 
 export async function loadGarments(db: SQLite.SQLiteDatabase): Promise<Garment[]> {
-  const rows = await db.getAllAsync<GarmentRow>('SELECT * FROM garments ORDER BY created_at DESC, id DESC');
-  const obs = await db.getAllAsync<ObservationRow>('SELECT * FROM observations ORDER BY at ASC, id ASC');
+  return withDbError('loadGarments', async () => {
+    const rows = await db.getAllAsync<GarmentRow>('SELECT * FROM garments ORDER BY created_at DESC, id DESC');
+    const obs = await db.getAllAsync<ObservationRow>('SELECT * FROM observations ORDER BY at ASC, id ASC');
 
-  const byGarment = new Map<number, FitObservation[]>();
-  obs.forEach((r) => {
-    const list = byGarment.get(r.garment_id) ?? [];
-    list.push(rowToObservation(r));
-    byGarment.set(r.garment_id, list);
+    const byGarment = new Map<number, FitObservation[]>();
+    obs.forEach((r) => {
+      const list = byGarment.get(r.garment_id) ?? [];
+      list.push(rowToObservation(r));
+      byGarment.set(r.garment_id, list);
+    });
+
+    return rows.map((r) => hydrate(rowToCore(r), byGarment.get(r.id) ?? []));
   });
-
-  return rows.map((r) => hydrate(rowToCore(r), byGarment.get(r.id) ?? []));
 }
 
 async function insertGarmentRow(db: SQLite.SQLiteDatabase, g: GarmentCore): Promise<void> {
@@ -200,36 +229,40 @@ async function insertGarmentRow(db: SQLite.SQLiteDatabase, g: GarmentCore): Prom
 }
 
 export async function insertGarment(db: SQLite.SQLiteDatabase, g: Garment): Promise<void> {
-  await insertGarmentRow(db, g);
+  return withDbError('insertGarment', () => insertGarmentRow(db, g));
 }
 
 /** Edits the garment record itself. Fit observations are never touched here. */
 export async function updateGarment(db: SQLite.SQLiteDatabase, g: Garment): Promise<void> {
-  await db.runAsync(
-    `UPDATE garments SET brand = ?, name = ?, cat = ?, size = ?, fit = ?, sil = ?, tags = ?,
-       cap = ?, bg = ?, m = ?, visual = ?, photo = ?, stretch = ? WHERE id = ?`,
-    g.brand,
-    g.name,
-    g.cat,
-    g.size,
-    g.fit,
-    g.sil,
-    JSON.stringify(g.tags),
-    g.cap,
-    JSON.stringify(g.bg),
-    JSON.stringify(g.m),
-    g.visual,
-    g.photo,
-    g.stretch,
-    g.id
-  );
+  return withDbError('updateGarment', async () => {
+    await db.runAsync(
+      `UPDATE garments SET brand = ?, name = ?, cat = ?, size = ?, fit = ?, sil = ?, tags = ?,
+         cap = ?, bg = ?, m = ?, visual = ?, photo = ?, stretch = ? WHERE id = ?`,
+      g.brand,
+      g.name,
+      g.cat,
+      g.size,
+      g.fit,
+      g.sil,
+      JSON.stringify(g.tags),
+      g.cap,
+      JSON.stringify(g.bg),
+      JSON.stringify(g.m),
+      g.visual,
+      g.photo,
+      g.stretch,
+      g.id
+    );
+  });
 }
 
 export async function deleteGarment(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM observations WHERE garment_id = ?', id);
-    await db.runAsync('DELETE FROM garments WHERE id = ?', id);
-  });
+  return withDbError('deleteGarment', () =>
+    db.withTransactionAsync(async () => {
+      await db.runAsync('DELETE FROM observations WHERE garment_id = ?', id);
+      await db.runAsync('DELETE FROM garments WHERE id = ?', id);
+    })
+  );
 }
 
 export interface RestoreObservation { at: number; note: string; comfort: FeelEntry[]; visual?: string }
@@ -246,27 +279,29 @@ export async function replaceAllData(
   db: SQLite.SQLiteDatabase,
   data: { garments: RestoreGarment[]; bodyMeasurements: RestoreBodyMeasurement[] }
 ): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM observations');
-    await db.runAsync('DELETE FROM garments');
-    await db.runAsync('DELETE FROM body_measurements');
-    for (const g of data.garments) {
-      await insertGarmentRow(db, g);
-      for (const o of g.observations) {
-        await db.runAsync(
-          'INSERT INTO observations (garment_id, at, note, comfort, visual) VALUES (?, ?, ?, ?, ?)',
-          g.id,
-          o.at,
-          o.note,
-          JSON.stringify(o.comfort),
-          o.visual ?? null
-        );
+  return withDbError('replaceAllData', () =>
+    db.withTransactionAsync(async () => {
+      await db.runAsync('DELETE FROM observations');
+      await db.runAsync('DELETE FROM garments');
+      await db.runAsync('DELETE FROM body_measurements');
+      for (const g of data.garments) {
+        await insertGarmentRow(db, g);
+        for (const o of g.observations) {
+          await db.runAsync(
+            'INSERT INTO observations (garment_id, at, note, comfort, visual) VALUES (?, ?, ?, ?, ?)',
+            g.id,
+            o.at,
+            o.note,
+            JSON.stringify(o.comfort),
+            o.visual ?? null
+          );
+        }
       }
-    }
-    for (const bm of data.bodyMeasurements) {
-      await db.runAsync('INSERT INTO body_measurements (at, m) VALUES (?, ?)', bm.at, JSON.stringify(bm.m));
-    }
-  });
+      for (const bm of data.bodyMeasurements) {
+        await db.runAsync('INSERT INTO body_measurements (at, m) VALUES (?, ?)', bm.at, JSON.stringify(bm.m));
+      }
+    })
+  );
 }
 
 /** Append-only — returns the row id the database assigned. */
@@ -274,42 +309,52 @@ export async function insertObservation(
   db: SQLite.SQLiteDatabase,
   o: Omit<FitObservation, 'id'>
 ): Promise<number> {
-  const res = await db.runAsync(
-    'INSERT INTO observations (garment_id, at, note, comfort, visual) VALUES (?, ?, ?, ?, ?)',
-    o.garmentId,
-    o.at,
-    o.note,
-    JSON.stringify(o.comfort),
-    o.visual ?? null
-  );
-  return res.lastInsertRowId;
+  return withDbError('insertObservation', async () => {
+    const res = await db.runAsync(
+      'INSERT INTO observations (garment_id, at, note, comfort, visual) VALUES (?, ?, ?, ?, ?)',
+      o.garmentId,
+      o.at,
+      o.note,
+      JSON.stringify(o.comfort),
+      o.visual ?? null
+    );
+    return res.lastInsertRowId;
+  });
 }
 
 export async function getUnits(db: SQLite.SQLiteDatabase): Promise<Units> {
-  const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', 'units');
-  return row?.value === 'in' ? 'in' : 'cm';
+  return withDbError('getUnits', async () => {
+    const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', 'units');
+    return row?.value === 'in' ? 'in' : 'cm';
+  });
 }
 
 export async function setUnits(db: SQLite.SQLiteDatabase, units: Units): Promise<void> {
-  await db.runAsync(
-    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-    'units',
-    units
-  );
+  return withDbError('setUnits', async () => {
+    await db.runAsync(
+      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      'units',
+      units
+    );
+  });
 }
 
 /** Whether the first-run onboarding wizard has already been shown/dismissed. */
 export async function getOnboarded(db: SQLite.SQLiteDatabase): Promise<boolean> {
-  const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', 'onboarded');
-  return row?.value === '1';
+  return withDbError('getOnboarded', async () => {
+    const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', 'onboarded');
+    return row?.value === '1';
+  });
 }
 
 export async function setOnboarded(db: SQLite.SQLiteDatabase, done: boolean): Promise<void> {
-  await db.runAsync(
-    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-    'onboarded',
-    done ? '1' : '0'
-  );
+  return withDbError('setOnboarded', async () => {
+    await db.runAsync(
+      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      'onboarded',
+      done ? '1' : '0'
+    );
+  });
 }
 
 function rowToBodyMeasurement(r: BodyMeasurementRow): BodyMeasurement {
@@ -317,8 +362,10 @@ function rowToBodyMeasurement(r: BodyMeasurementRow): BodyMeasurement {
 }
 
 export async function loadBodyMeasurements(db: SQLite.SQLiteDatabase): Promise<BodyMeasurement[]> {
-  const rows = await db.getAllAsync<BodyMeasurementRow>('SELECT * FROM body_measurements ORDER BY at ASC, id ASC');
-  return rows.map(rowToBodyMeasurement);
+  return withDbError('loadBodyMeasurements', async () => {
+    const rows = await db.getAllAsync<BodyMeasurementRow>('SELECT * FROM body_measurements ORDER BY at ASC, id ASC');
+    return rows.map(rowToBodyMeasurement);
+  });
 }
 
 /** Append-only, like observations — a new entry, not an overwrite. Returns the assigned row id. */
@@ -326,11 +373,15 @@ export async function insertBodyMeasurement(
   db: SQLite.SQLiteDatabase,
   entry: Omit<BodyMeasurement, 'id'>
 ): Promise<number> {
-  const res = await db.runAsync('INSERT INTO body_measurements (at, m) VALUES (?, ?)', entry.at, JSON.stringify(entry.m));
-  return res.lastInsertRowId;
+  return withDbError('insertBodyMeasurement', async () => {
+    const res = await db.runAsync('INSERT INTO body_measurements (at, m) VALUES (?, ?)', entry.at, JSON.stringify(entry.m));
+    return res.lastInsertRowId;
+  });
 }
 
 /** Deleting is for correcting a mis-entered value, not for editing history in place. */
 export async function deleteBodyMeasurement(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
-  await db.runAsync('DELETE FROM body_measurements WHERE id = ?', id);
+  return withDbError('deleteBodyMeasurement', async () => {
+    await db.runAsync('DELETE FROM body_measurements WHERE id = ?', id);
+  });
 }
