@@ -1,0 +1,125 @@
+import { renderApp, screen, userEvent, makeReference, __fake } from './testUtils';
+
+jest.mock('../../db', () => require('./fakeDb'));
+jest.mock('../../utils/photo', () => require('./nativeMocks').photo);
+jest.mock('../../utils/backup', () => require('./nativeMocks').backup);
+
+async function openAddManual(seed: Parameters<typeof renderApp>[0] = {}) {
+  await renderApp(seed);
+  const user = userEvent.setup();
+  await user.press(screen.getByRole('tab', { name: 'Closet' }));
+  await user.press(screen.getByRole('button', { name: 'Add garment' }));
+  await user.press(screen.getByRole('button', { name: /^Manual entry/ }));
+  await screen.findByText('Garment details');
+  return user;
+}
+
+const valueOf = (label: string) => screen.getByLabelText(label).props.value as string;
+
+describe('Add garment (manual entry)', () => {
+  it('starts with every field blank — nothing pre-filled the user did not type', async () => {
+    await openAddManual({ garments: [makeReference()] });
+    for (const label of ['Brand', 'Product name', 'Size', 'Silhouette', 'Chest', 'Shoulder', 'Length', 'Sleeve', 'Waist']) {
+      expect(valueOf(label) ?? '').toBe('');
+    }
+  });
+
+  it('offers the closet\'s typical values only as ghost placeholders, never as values', async () => {
+    await openAddManual({ garments: [makeReference()] });
+    // Reference garment's chest is 54 cm — hint text only.
+    expect(screen.getByLabelText('Chest').props.placeholder).toBe('54');
+    expect(valueOf('Chest') ?? '').toBe('');
+  });
+
+  it('hides the tab bar while adding (focused workflow)', async () => {
+    await openAddManual();
+    expect(screen.queryByRole('tab', { name: 'Home' })).toBeNull();
+  });
+
+  it('rejects an incomplete save with inline errors, saves nothing, and keeps what was typed', async () => {
+    const user = await openAddManual();
+    await user.type(screen.getByLabelText('Product name'), 'Linen Shirt');
+    await user.press(screen.getByRole('button', { name: 'Save to closet' }));
+
+    expect(await screen.findByText('Add the missing details before saving.')).toBeTruthy();
+    expect(screen.getAllByText('Required').length).toBeGreaterThanOrEqual(2); // brand + size
+    expect(screen.getByText('Add at least one measurement to save.')).toBeTruthy();
+    expect(__fake.snapshot().garments).toHaveLength(0);
+    // The draft is left exactly as typed — never re-asked to redo the form.
+    expect(valueOf('Product name')).toBe('Linen Shirt');
+  });
+
+  it('saves a complete garment: stored measurements are only the ones typed, and it lands in the closet', async () => {
+    const user = await openAddManual();
+    await user.type(screen.getByLabelText('Brand'), 'Uniqlo');
+    await user.type(screen.getByLabelText('Product name'), 'Linen Shirt');
+    await user.type(screen.getByLabelText('Size'), 'L');
+    await user.type(screen.getByLabelText('Chest'), '56');
+    await user.press(screen.getByRole('button', { name: 'Save to closet' }));
+
+    expect(await screen.findByLabelText(/Uniqlo Linen Shirt, tops, size L/)).toBeTruthy();
+    const { garments, observations } = __fake.snapshot();
+    expect(garments).toHaveLength(1);
+    // Measurement integrity: only chest was entered, so only chest is stored.
+    expect(garments[0].m).toEqual({ chest: 56 });
+    expect(garments[0].fit).toBe('—');
+    // The initial history entry is always written, so Closet/Detail have something real to show.
+    expect(observations).toHaveLength(1);
+    expect(observations[0].note).toBe('Added to closet');
+  });
+
+  it('"Don\'t know the brand?" sets an explicit, honest sentinel the user chose', async () => {
+    const user = await openAddManual();
+    await user.press(screen.getByText("Don't know the brand?"));
+    expect(valueOf('Brand')).toBe('Unknown brand');
+    await user.press(screen.getByText("Don't know?"));
+    expect(valueOf('Size')).toBe('Unknown size');
+  });
+
+  it('switching category drops measurements typed under the old category', async () => {
+    const user = await openAddManual();
+    await user.type(screen.getByLabelText('Chest'), '56');
+    expect(valueOf('Chest')).toBe('56');
+
+    await user.press(screen.getByRole('button', { name: 'Pants' }));
+    // Pants have no chest field at all, and switching back must not resurrect the old value.
+    expect(screen.queryByLabelText('Chest')).toBeNull();
+    expect(screen.getByLabelText('Inseam')).toBeTruthy();
+    await user.press(screen.getByRole('button', { name: 'Tops' }));
+    expect(valueOf('Chest') ?? '').toBe('');
+  });
+
+  it('toggling cm/in converts what is already typed, and leaves empty fields empty', async () => {
+    const user = await openAddManual();
+    await user.type(screen.getByLabelText('Chest'), '50.8');
+    await user.press(screen.getByRole('radio', { name: 'Inches' }));
+    expect(valueOf('Chest')).toBe('20');
+    expect(valueOf('Shoulder') ?? '').toBe(''); // never 0, never copied from a sibling
+    expect(__fake.snapshot().units).toBe('in');
+  });
+
+  it('stores measurements in cm even when they were typed in inches', async () => {
+    const user = await openAddManual({ units: 'in' });
+    await user.type(screen.getByLabelText('Brand'), 'Levi');
+    await user.type(screen.getByLabelText('Product name'), 'Tee');
+    await user.type(screen.getByLabelText('Size'), 'M');
+    await user.type(screen.getByLabelText('Chest'), '20');
+    await user.press(screen.getByRole('button', { name: 'Save to closet' }));
+    await screen.findByLabelText(/Levi Tee/);
+    expect(__fake.snapshot().garments[0].m.chest).toBeCloseTo(50.8, 0);
+  });
+
+  it('shows a visible error and keeps the draft when the database write fails', async () => {
+    const user = await openAddManual();
+    await user.type(screen.getByLabelText('Brand'), 'Uniqlo');
+    await user.type(screen.getByLabelText('Product name'), 'Linen Shirt');
+    await user.type(screen.getByLabelText('Size'), 'L');
+    await user.type(screen.getByLabelText('Chest'), '56');
+    __fake.failNext('insertGarment');
+    await user.press(screen.getByRole('button', { name: 'Save to closet' }));
+
+    expect(await screen.findByText(/Couldn't save/i)).toBeTruthy();
+    expect(__fake.snapshot().garments).toHaveLength(0);
+    expect(valueOf('Product name')).toBe('Linen Shirt');
+  });
+});

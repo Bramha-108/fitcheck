@@ -1,0 +1,104 @@
+import { renderApp, screen, userEvent, makeReference, __fake } from './testUtils';
+
+jest.mock('../../db', () => require('./fakeDb'));
+jest.mock('../../utils/photo', () => require('./nativeMocks').photo);
+jest.mock('../../utils/backup', () => require('./nativeMocks').backup);
+
+async function openDetail(seed: Parameters<typeof renderApp>[0]) {
+  await renderApp(seed);
+  const user = userEvent.setup();
+  await user.press(screen.getByRole('tab', { name: 'Closet' }));
+  await user.press(screen.getByLabelText(/Uniqlo Oxford Shirt/));
+  await screen.findByRole('button', { name: 'Remove from closet' });
+  return user;
+}
+
+describe('Garment detail', () => {
+  it('shows the garment and never renders an unrecorded measurement as zero', async () => {
+    await openDetail({ garments: [makeReference({ m: { chest: 54 } })] });
+    expect(screen.getByText('Oxford Shirt')).toBeTruthy();
+    expect(screen.queryByText(/^0(\.0)? ?cm$/)).toBeNull();
+  });
+
+  it('"Update how it fits" appends a history entry and keeps the earlier ones', async () => {
+    const user = await openDetail({ garments: [makeReference()] });
+    const before = __fake.snapshot().observations.length;
+
+    await user.press(screen.getByRole('button', { name: 'Update how it fits' }));
+    expect(await screen.findByText('How does it fit today?')).toBeTruthy();
+    await user.press(screen.getByRole('button', { name: 'Chest' }));
+    await user.press(screen.getByRole('button', { name: 'Tight' }));
+    await user.type(screen.getByLabelText('Comfort notes'), 'Pulls across the chest');
+    await user.press(screen.getByRole('button', { name: 'Add to fit history' }));
+
+    expect(await screen.findByText('Added to fit history — earlier entries kept.')).toBeTruthy();
+    const { observations } = __fake.snapshot();
+    expect(observations).toHaveLength(before + 1); // appended, never overwritten
+    expect(observations[observations.length - 1]).toMatchObject({
+      note: 'Pulls across the chest',
+      comfort: [{ area: 'Chest', verdict: 'Tight' }],
+    });
+    expect(observations[0].note).toBe('Fits great');
+  });
+
+  it('a failed fit update is reported and nothing is lost', async () => {
+    const user = await openDetail({ garments: [makeReference()] });
+    const before = __fake.snapshot();
+    await user.press(screen.getByRole('button', { name: 'Update how it fits' }));
+    await user.press(screen.getByRole('button', { name: 'Chest' }));
+    await user.press(screen.getByRole('button', { name: 'Loose' }));
+    __fake.failNext('insertObservation');
+    await user.press(screen.getByRole('button', { name: 'Add to fit history' }));
+    expect(await screen.findByText("Couldn't save that update — try again.")).toBeTruthy();
+    expect(__fake.snapshot().observations).toEqual(before.observations);
+  });
+
+  it('removing a garment asks first, says it cannot be undone, and Cancel keeps it', async () => {
+    const user = await openDetail({ garments: [makeReference()] });
+    await user.press(screen.getByRole('button', { name: 'Remove from closet' }));
+    expect(await screen.findByText('Remove garment?')).toBeTruthy();
+    expect(screen.getByText(/can't be undone/)).toBeTruthy();
+    await user.press(screen.getByText('Cancel'));
+    expect(__fake.snapshot().garments).toHaveLength(1);
+  });
+
+  it('confirming removal deletes the garment and its history, then lands on an honest empty closet', async () => {
+    const user = await openDetail({ garments: [makeReference()] });
+    await user.press(screen.getByRole('button', { name: 'Remove from closet' }));
+    await user.press(await screen.findByText('Remove'));
+    expect(await screen.findByText('Your closet is empty')).toBeTruthy();
+    const snap = __fake.snapshot();
+    expect(snap.garments).toHaveLength(0);
+    expect(snap.observations).toHaveLength(0);
+  });
+
+  it('editing prefills the saved values and saves changes without touching history', async () => {
+    const user = await openDetail({ garments: [makeReference()] });
+    await user.press(screen.getByRole('button', { name: 'Edit' }));
+    expect((await screen.findByLabelText('Product name')).props.value).toBe('Oxford Shirt');
+    expect(screen.getByLabelText('Chest').props.value).toBe('54');
+
+    const obsBefore = __fake.snapshot().observations;
+    await user.clear(screen.getByLabelText('Product name'));
+    await user.type(screen.getByLabelText('Product name'), 'Oxford Shirt v2');
+    await user.press(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText('Garment updated.')).toBeTruthy();
+    const snap = __fake.snapshot();
+    expect(snap.garments[0].name).toBe('Oxford Shirt v2');
+    expect(snap.garments[0].m).toEqual({ chest: 54, shoulder: 45, length: 70, sleeve: 62, waist: 50 });
+    expect(snap.observations).toEqual(obsBefore);
+  });
+
+  it('caps a long fit history behind "Show all N entries"', async () => {
+    const many = Array.from({ length: 9 }, (_, i) => ({
+      at: Date.now() - (9 - i) * 86_400_000,
+      note: `Entry number ${i}`,
+      comfort: [{ area: 'Chest', verdict: 'Good' as const }],
+    }));
+    const user = await openDetail({ garments: [makeReference({ observations: many })] });
+    const toggle = await screen.findByText(/Show all 9 entries/);
+    await user.press(toggle);
+    expect(await screen.findByText('Show less')).toBeTruthy();
+  });
+});

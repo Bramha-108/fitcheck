@@ -248,9 +248,12 @@ function GarmentTile({
     // real tile only ever rendered animating-in or plain), so this plays once.
   }, []);
 
-  const tone = g.history[g.history.length - 1].tone;
-  const lastNote = g.history[g.history.length - 1].note;
-  const tileLabel = `${g.brand} ${g.name}, ${g.cat}, size ${g.size}, ${g.fit}. ${lastNote}`;
+  // Normally every garment has at least its "Added to closet" entry, but a restored
+  // backup (or a save interrupted between the garment row and its first observation)
+  // can leave one with no history — show no tone dot rather than inventing a fit state.
+  const latest = g.history[g.history.length - 1] as (typeof g.history)[number] | undefined;
+  const tone = latest?.tone;
+  const tileLabel = `${g.brand} ${g.name}, ${g.cat}, size ${g.size}, ${g.fit}.${latest ? ` ${latest.note}` : ''}`;
 
   const content = (
     <Pressable
@@ -262,13 +265,15 @@ function GarmentTile({
     >
       <View ref={photoRef} collapsable={false}>
         <PhotoTile bg={g.bg} caption={g.cap} height={196} uri={g.photo}>
-          <View style={styles.cornerDotWrap}>
-            <View
-              style={[styles.cornerDot, { backgroundColor: tone === 'good' ? COLORS.good : tone === 'warn' ? COLORS.warn : COLORS.bad }]}
-              accessibilityElementsHidden
-              importantForAccessibility="no-hide-descendants"
-            />
-          </View>
+          {tone && (
+            <View style={styles.cornerDotWrap}>
+              <View
+                style={[styles.cornerDot, { backgroundColor: tone === 'good' ? COLORS.good : tone === 'warn' ? COLORS.warn : COLORS.bad }]}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              />
+            </View>
+          )}
         </PhotoTile>
       </View>
       <Eyebrow style={{ marginTop: 10 }}>{g.brand}</Eyebrow>
