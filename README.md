@@ -49,18 +49,82 @@ generic/latest Expo docs when making changes).
 
 ### Building a release APK locally
 
-`npm run build:apk` uses EAS's cloud build service, which requires an Expo
-account. To build a signed APK purely from source with no cloud dependency,
-use the standard Expo/Gradle local build path:
+FitCheck builds a signed, sideloadable APK purely from source with no cloud
+dependency (no Expo account or EAS needed):
 
 ```bash
 npx expo prebuild -p android
 cd android && ./gradlew assembleRelease
+# -> android/app/build/outputs/apk/release/app-release.apk
 ```
+
+The APK targets `arm64-v8a` and `armeabi-v7a` (nearly all physical phones) and
+has R8 minification and resource shrinking enabled. Bump `expo.version` and
+`expo.android.versionCode` in `app.json` for every release.
 
 Release signing (`plugins/withReleaseSigning.js`) looks for `keystore.properties`
 and a keystore under `keystore/`; if neither is present it falls back to debug
 signing with a warning, so a fresh clone builds without any extra setup.
+
+## Backing up your closet
+
+Because everything lives only on your device, uninstalling the app or losing
+the phone loses the closet. **Profile → Back up your closet** exports it and
+restores it:
+
+- **Export backup** writes a single JSON file (garments, their full fit
+  history, and your body-measurement log) and opens your system share sheet,
+  so you choose where it goes — Files, a cloud drive, email. FitCheck itself
+  never uploads it anywhere.
+- **Import backup** reads a file you pick, validates it, and asks before doing
+  anything.
+
+Things worth knowing before you rely on it:
+
+- **Import replaces, it doesn't merge.** Restoring swaps your current closet
+  for the file's contents (the confirmation dialog says so, with counts). It's
+  all-or-nothing: if anything fails partway, your existing closet is left
+  untouched.
+- **Photos are not included.** The file holds the path a photo had on the
+  device that exported it, which is meaningless on another device or after a
+  reinstall. On import, any photo that isn't actually present on the current
+  device is dropped rather than left as a broken reference. Measurements, fit
+  history and everything else carry over.
+- **Invalid files are rejected, not repaired.** A file with an unknown
+  category, a zero/negative measurement, a garment missing its brand/name/size
+  or all measurements, duplicate ids, or a newer format version is refused
+  with an explanation. FitCheck never fills in a value the file didn't
+  contain.
+
+The file format is defined and validated in
+[`src/utils/backupFormat.ts`](src/utils/backupFormat.ts).
+
+## Testing
+
+```bash
+npm test            # everything
+npm run typecheck   # tsc --noEmit
+```
+
+There are two Jest projects (see [`jest.config.js`](jest.config.js)):
+
+- **`unit`** — plain `ts-jest` for code with no React Native imports: the
+  comparison engine, unit conversion, `hydrate`, and the backup file
+  format/validator.
+- **`screens`** — [`jest-expo`](https://docs.expo.dev/develop/unit-testing/) +
+  `@testing-library/react-native`. These render the real `<App />` and drive it
+  like a user (tap, type, confirm dialogs), covering Closet, Add/Edit garment,
+  FitCheck and Result, Garment detail, and Export/Import. Only native
+  boundaries are faked — SQLite (an in-memory stand-in in
+  `src/screens/__tests__/fakeDb.ts`), fonts, and the file picker/share
+  sheet — so the store, engine and screens under test are the real code.
+
+The tests encode the rules in [`DESIGN_GUIDELINES.md`](DESIGN_GUIDELINES.md)
+that are easy to regress: measurements never pre-filled or inferred, required
+fields rejected with the draft kept, empty states that name their real cause,
+and appended (never overwritten) fit history. They have not been run on
+physical devices or with a screen reader — see the accessibility note in
+[Status](#status).
 
 ## Project structure
 
@@ -70,9 +134,11 @@ signing with a warning, so a fresh clone builds without any extra setup.
 - `src/store.tsx` — app state, persistence orchestration, and screen routing
 - `src/db/` — local SQLite schema and queries
 - `src/data/` — category/measurement-zone constants and derived data helpers
-- `src/screens/` — one file per screen
+- `src/screens/` — one file per screen (tests in `__tests__/`)
 - `src/components/` — shared UI primitives
-- `src/utils/` — units conversion, motion constants, photo storage
+- `src/utils/` — units conversion, motion constants, photo storage, and
+  backup export/import (`backup.ts` for the picker/share I/O,
+  `backupFormat.ts` for the pure file format + validation)
 
 ## Status
 
@@ -81,6 +147,15 @@ useful, not a maintained product with SLAs. See
 [`docs/design-history/`](docs/design-history/) for the design/planning notes
 this project was built from, and the open items being worked through before
 and after this release.
+
+Known limitations:
+
+- Backups don't include photos, and import replaces the closet rather than
+  merging (see [Backing up your closet](#backing-up-your-closet)).
+- The automated tests fake the native layer. The real file picker, share sheet
+  and SQLite paths (`src/utils/backup.ts`, `src/db/index.ts`) haven't been
+  exercised by tests, and nothing has been run with TalkBack/VoiceOver — labels
+  and roles are in place, but manual device testing is still worth doing.
 
 ## License
 
