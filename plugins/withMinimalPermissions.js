@@ -13,6 +13,9 @@ const REMOVE_PERMISSIONS = [
   'android.permission.VIBRATE',
   'android.permission.READ_EXTERNAL_STORAGE',
   'android.permission.WRITE_EXTERNAL_STORAGE',
+  // Merged in by expo-application for getInstallReferrerAsync() (Play Store install
+  // attribution), which FitCheck never calls — it's only used for the app's version.
+  'com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE',
 ];
 
 module.exports = function withMinimalPermissions(config) {
