@@ -37,6 +37,7 @@ const MHINT: Partial<Record<string, string>> = {
   thigh: 'Straight across, just under the crotch seam.',
   knee: 'Straight across at the knee.',
   inseam: 'Crotch seam to hem along the inside leg.',
+  outseam: 'Top of the waistband to hem along the outside leg.',
   legOpening: 'Straight across the hem.',
 };
 

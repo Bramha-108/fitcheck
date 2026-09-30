@@ -6,11 +6,24 @@ export const TOP_MEASURES: [ZoneKey, string][] = [
 
 export const PANT_MEASURES: [ZoneKey, string][] = [
   ['waist', 'Waist'], ['rise', 'Rise'], ['hip', 'Hip / seat'], ['thigh', 'Thigh'],
-  ['knee', 'Knee'], ['inseam', 'Inseam'], ['legOpening', 'Leg opening'],
+  ['knee', 'Knee'], ['inseam', 'Inseam'], ['outseam', 'Outseam'], ['legOpening', 'Leg opening'],
 ];
 
 export function keysFor(cat: Category): [ZoneKey, string][] {
   return cat === 'pants' ? PANT_MEASURES : TOP_MEASURES;
+}
+
+/** Zones that are entered, stored, displayed and compared like any other, but
+ * aren't part of what "measured completely" means for their category. Outseam is
+ * largely inseam + rise, which are already in the set — so a pants garment with
+ * every other zone logged is still fully measured without it, and adding it
+ * didn't retroactively demote existing strong references (hydrate.ts's
+ * isStrongReference). */
+const SUPPLEMENTARY_ZONES: ReadonlySet<ZoneKey> = new Set<ZoneKey>(['outseam']);
+
+/** keysFor(cat) minus SUPPLEMENTARY_ZONES — the set "measured completely" is judged against. */
+export function coreKeysFor(cat: Category): [ZoneKey, string][] {
+  return keysFor(cat).filter(([k]) => !SUPPLEMENTARY_ZONES.has(k));
 }
 
 /** Every zone key that appears in any category's measurement set — used where code
@@ -50,12 +63,13 @@ export const FEEL: Partial<Record<ZoneKey, [string, string]>> = {
   thigh: ['More room in the thigh', 'Closer in the thigh'],
   knee: ['Straighter through the knee', 'Narrower through the knee'],
   inseam: ['Longer inseam — more stacking', 'Shorter inseam — less stacking'],
+  outseam: ['Longer overall, waistband to hem', 'Shorter overall, waistband to hem'],
   legOpening: ['Wider leg opening', 'Narrower leg opening'],
 };
 
 export const TOLERANCE: Record<ZoneKey, number> = {
   chest: 4, shoulder: 2, length: 4, sleeve: 3,
-  waist: 3, rise: 2, hip: 4, thigh: 3, knee: 3, inseam: 4, legOpening: 4,
+  waist: 3, rise: 2, hip: 4, thigh: 3, knee: 3, inseam: 4, outseam: 4, legOpening: 4,
 };
 
 export const STRETCH_LEVELS: StretchLevel[] = ['Rigid', 'Some stretch', 'Very stretchy'];
@@ -73,7 +87,7 @@ export const STRETCH_MULTIPLIER: Record<StretchLevel, number> = {
  * sleeve. 1 is neutral; missing keys default to 1 wherever this is read. */
 export const ZONE_WEIGHT: Partial<Record<ZoneKey, number>> = {
   shoulder: 1.5, chest: 1, length: 0.75, sleeve: 0.75,
-  waist: 1.5, rise: 1, hip: 1, thigh: 1, knee: 0.75, inseam: 1, legOpening: 0.75,
+  waist: 1.5, rise: 1, hip: 1, thigh: 1, knee: 0.75, inseam: 1, outseam: 0.75, legOpening: 0.75,
 };
 
 /** Zone pairs whose ratio stands in for "shape" — e.g. shoulder/chest reads as how

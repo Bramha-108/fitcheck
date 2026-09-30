@@ -2,7 +2,7 @@ export type Category = 'tops' | 'pants' | 'jackets';
 
 export type ZoneKey =
   | 'chest' | 'shoulder' | 'length' | 'sleeve'
-  | 'waist' | 'rise' | 'hip' | 'thigh' | 'knee' | 'inseam' | 'legOpening';
+  | 'waist' | 'rise' | 'hip' | 'thigh' | 'knee' | 'inseam' | 'outseam' | 'legOpening';
 
 export type Measurements = Partial<Record<ZoneKey, number>>;
 

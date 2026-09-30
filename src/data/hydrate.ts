@@ -1,5 +1,5 @@
 import { Category, FeelEntry, FitObservation, Garment, HistoryEntry } from '../types';
-import { COMFORT_SCORE, keysFor } from './constants';
+import { COMFORT_SCORE, coreKeysFor, keysFor } from './constants';
 import { historyTone } from '../engine/compare';
 
 /** How far back a comfort observation still counts as "recent" for reference status. */
@@ -71,7 +71,7 @@ export type GarmentCore = Omit<Garment, 'feels' | 'history' | 'visual' | 'observ
  * (confidence scoring, prefill defaults, the Profile/Home "references" lists).
  */
 function isStrongReference(core: Pick<GarmentCore, 'cat' | 'm'>, observations: FitObservation[], feels: FeelEntry[]): boolean {
-  const complete = keysFor(core.cat).every(([k]) => core.m[k] !== undefined);
+  const complete = coreKeysFor(core.cat).every(([k]) => core.m[k] !== undefined);
   if (!complete || !feels.length) return false;
 
   const withFeedback = observations.filter((o) => o.comfort.length > 0);

@@ -53,6 +53,14 @@ describe('hydrate() → isStrongReference() (the "ref" flag)', () => {
     expect(g.ref).toBe(false);
   });
 
+  it('pants: outseam is optional for "measured completely" — a fully measured pair without it still qualifies', () => {
+    const m = { waist: 82, rise: 28, hip: 104, thigh: 62, knee: 44, inseam: 81, legOpening: 40 };
+    const g = hydrate(makeCore({ cat: 'pants', m }), [obs({ comfort: [{ area: 'Waist', verdict: 'Good' }] })]);
+    expect(g.ref).toBe(true);
+    const missingInseam = { ...m, inseam: undefined, outseam: 104 };
+    expect(hydrate(makeCore({ cat: 'pants', m: missingInseam }), [obs({ comfort: [{ area: 'Waist', verdict: 'Good' }] })]).ref).toBe(false);
+  });
+
   it('is true for complete measurements + recent, fully positive feedback', () => {
     const g = hydrate(makeCore(), [obs({ comfort: [{ area: 'Chest', verdict: 'Good' }] })]);
     expect(g.ref).toBe(true);

@@ -112,6 +112,28 @@ describe('Add garment (manual entry)', () => {
     expect(__fake.snapshot().garments[0].m.chest).toBeCloseTo(50.8, 0);
   });
 
+  it('offers Outseam for pants only, saves it in cm, and shows it on the garment and in FitCheck', async () => {
+    const user = await openAddManual({ units: 'in' });
+    expect(screen.queryByLabelText('Outseam')).toBeNull(); // tops
+    await user.press(screen.getByRole('button', { name: 'Pants' }));
+    await user.type(screen.getByLabelText('Brand'), 'Levi');
+    await user.type(screen.getByLabelText('Product name'), '501');
+    await user.type(screen.getByLabelText('Size'), '32');
+    await user.type(screen.getByLabelText('Outseam'), '41');
+    await user.press(screen.getByRole('button', { name: 'Save to closet' }));
+
+    await user.press(await screen.findByLabelText(/Levi 501/));
+    await screen.findByRole('button', { name: 'Remove from closet' });
+    expect(__fake.snapshot().garments[0].m).toEqual({ outseam: expect.closeTo(104.1, 0) });
+    expect(screen.getByText('Outseam')).toBeTruthy();
+
+    await user.press(screen.getByLabelText(/^Back/));
+    await user.press(screen.getByRole('tab', { name: 'FitCheck' }));
+    expect(screen.queryByLabelText('Outseam')).toBeNull(); // FitCheck starts on tops
+    await user.press(screen.getByRole('button', { name: 'Pants' }));
+    expect(screen.getByLabelText('Outseam').props.placeholder).toBe('41'); // the user's own garment, in inches
+  });
+
   it('shows a visible error and keeps the draft when the database write fails', async () => {
     const user = await openAddManual();
     await user.type(screen.getByLabelText('Brand'), 'Uniqlo');

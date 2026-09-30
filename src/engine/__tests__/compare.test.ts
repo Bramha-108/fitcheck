@@ -159,3 +159,25 @@ describe('seedNewGarment()', () => {
     expect(seedNewGarment('tops', pool)).toEqual({ category: 'tops', size: '', fit: '', silhouette: '', stretch: 'Some stretch' });
   });
 });
+
+describe('outseam (pants-only)', () => {
+  it('is a pants measurement and never a tops/jackets one', () => {
+    expect(keysFor('pants').map(([k]) => k)).toContain('outseam');
+    expect(keysFor('tops').map(([k]) => k)).not.toContain('outseam');
+    expect(keysFor('jackets').map(([k]) => k)).not.toContain('outseam');
+  });
+
+  it('is diffed like any other zone when both sides have it', () => {
+    const g = makeGarment({ cat: 'pants', m: { waist: 82, outseam: 104 } });
+    const r = buildResult(makeFc({ category: 'pants', waist: '82', outseam: '108' }), [g], LABELS);
+    const row = r!.diffs.find((d) => d.label === LABELS.outseam);
+    expect(row).toBeTruthy();
+    expect(r!.confidenceNote).toContain('2 of 8 measurements compared');
+  });
+
+  it('never participates when only one side has it', () => {
+    const g = makeGarment({ cat: 'pants', m: { waist: 82 } });
+    const r = buildResult(makeFc({ category: 'pants', waist: '82', outseam: '108' }), [g], LABELS);
+    expect(r!.diffs.map((d) => d.label)).toEqual([LABELS.waist]);
+  });
+});
