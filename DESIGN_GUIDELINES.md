@@ -82,6 +82,17 @@ fit-observation chip list (comfort tags, visual-preference tags, onboarding
 tags) must be keyed by category the same way, not written as one flat list
 that happens to read fine for tops and gets reused everywhere else.
 
+**Adding a measurement zone means deciding whether it's core or
+supplementary.** Every zone in `keysFor(category)` is entered, stored,
+unit-converted, displayed and compared the same way. `coreKeysFor(category)`
+is that set minus `SUPPLEMENTARY_ZONES` (`src/data/constants.ts`), and it's
+what "measured completely" is judged against (`hydrate.ts`'s
+`isStrongReference`). Outseam (pants, added 2026-10-01) is supplementary: it's
+largely inseam + rise, and making it core would have instantly demoted every
+fully measured pair of pants already saved. A new zone that mostly repeats
+existing ones should be supplementary too. Making a zone core changes what
+counts as a strong reference for garments that were saved before it existed.
+
 ### Unit switching
 
 One global, persisted unit preference (`store.units`) drives every screen —
@@ -220,7 +231,12 @@ entered and displayed.
 6. **Bottom sheets for in-context micro-decisions.** Use one when the choice is
    small and belongs to a record already on screen (fit verdict, garment quick
    actions) — see `FitSheet.tsx` for the reference implementation: it keeps the
-   garment visible underneath and labels its own dismiss affordance. Don't use a
+   garment visible underneath and labels its own dismiss affordance. A sheet
+   has a max height, so its body must scroll, with the primary action pinned
+   below the scroll area. Small phones, large system font sizes and an open
+   keyboard all push a "short" form past that height. Chip groups inside a
+   sheet wrap at natural width. Never force N chips into N equal columns,
+   because a label like "Too loose" then breaks mid-word. Don't use a
    bottom sheet for something that's actually the start of a new multi-step flow
    (see the Add-source decision below) — that's a full screen, correctly.
 7. **Don't navigate away from context unnecessarily.** If a decision can be
@@ -343,6 +359,13 @@ toward the generic guideline later:
   confidence is a tier + a short bar, never a decimal percentage.
 - **Confidence is secondary**, always shown after the conclusion, never as the
   headline.
+- **Measurement entry is one continuous flow.** `MeasurementGrid` (`UI.tsx`)
+  chains its fields: every field except the last shows the keyboard's Next
+  key, which moves to the next field in `keysFor` order with the keyboard
+  still open. The last field shows Done, which closes the keyboard. Build new
+  measurement entry on `MeasurementGrid` rather than bare `TextInput`s, so
+  this can't drift per screen. (Android only: the iOS number pad has no
+  submit key.)
 
 ## Motion language
 
@@ -540,6 +563,7 @@ casually walk back into them.
 | New garment silently pre-filled from the user's own closet history | `seedNewGarment`'s mode-based size/fit and reference-based silhouette/stretch were spread directly into a brand-new `NewGarmentDraft` as real `value`s (`EMPTY_NG` merged with `seedNewGarment(...)`), so opening Add Garment could already show a real Size/Fit selection the user never made | Violates Measurement integrity — even a *legitimate* smart default becomes fabricated input the instant it's a `value` instead of a `placeholder`; fixed by keeping `seedNewGarment`'s result local to `AddManualScreen.tsx` as hint text only |
 | Required identity fields silently defaulted instead of blocking save | `saveGarment` filled a blank brand/name/size with `'Unbranded'`/`'Untitled garment'`/`'—'` and saved anyway, so an incomplete garment (e.g. name typed, brand/size left blank) was indistinguishable from one the user actually finished | Violates "Do not save incomplete garments merely to let the user continue" — fixed by validating brand/name/size/≥1 measurement before writing anything, rejecting the save with inline errors (`ngErrors`) and leaving the draft intact otherwise |
 | Fit-update sheet pre-selected as real values | `store.tsx`'s sheet state started as `sArea: 'Shoulder'`, `sVerdict: 'Good'`, `sLook: 'Love the relaxed silhouette'`, and later opens kept the previous entry's picks — tapping "Add to fit history" without choosing anything saved "Good at the shoulder" plus a visual note the user never picked | Violates Measurement integrity and "Smart defaults, never fabricated ones" — fixed by opening the sheet blank every time and keeping the button disabled (relabeled with what's missing) until an area and a comfort verdict are chosen; visual preference and notes stay optional. Covered by `detail.test.tsx` |
+| Freshly picked photo stayed invisible until remount | `FadeImage` (`UI.tsx`) reset its opacity to 0 in a passive `useEffect`. `setValue(0)` also cancels a running fade, and a just-copied local photo can finish loading before that deferred effect runs, so the reset cancelled the fade-in and left Add/Edit Garment's preview blank until the screen remounted | Violates #22's "never hide system state": the photo was saved but looked missing. Fixed by resetting in a layout effect, only on a real `uri` change. Any "reset an Animated value when the source changes" logic must not run later than the event it's resetting for |
 | Assuming every garment has at least one history entry | `ClosetScreen.tsx`'s `GarmentTile` read `g.history[g.history.length - 1].tone` unguarded. The normal save path always writes an initial "Added to closet" observation, but a restored backup (`observations: []` is valid) or a save interrupted between `insertGarment` and `insertObservation` leaves a garment with none — and the whole Closet then crashed on every open | Fails #1's "incomplete data" system test and Measurement integrity's spirit — a garment with no fit history must render as having none (no tone dot, no note), never crash and never invent a green "good" state. Covered by `closet.test.tsx` and `backup.test.tsx` |
 
 ## Quick self-check before calling a screen done
