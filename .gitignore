@@ -54,3 +54,6 @@ keystore.properties
 
 # internal audit doc (kept locally, not for public release)
 /AUDIT_REPORT.md
+
+# Claude Code local config and project skills (release-apk skill lives here)
+.claude/
