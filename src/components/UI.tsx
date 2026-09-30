@@ -228,11 +228,28 @@ export function MeasurementGrid({
 }: {
   items: { key: string; label: string; value: string; placeholder?: string; onChange: (v: string) => void }[];
 }) {
+  // The keyboard's submit key walks the grid in order (Waist → Hip → Inseam…),
+  // keeping the keyboard up, and only the last cell's submit dismisses it — so
+  // entering a full set of measurements never means closing and reopening the
+  // keyboard between every field.
+  const inputs = React.useRef<(TextInput | null)[]>([]);
   return (
     <View style={styles.measureGrid}>
-      {items.map((it) => (
-        <MeasureCell key={it.key} label={it.label} value={it.value} placeholder={it.placeholder} onChange={it.onChange} />
-      ))}
+      {items.map((it, i) => {
+        const isLast = i === items.length - 1;
+        return (
+          <MeasureCell
+            key={it.key}
+            inputRef={(el) => { inputs.current[i] = el; }}
+            label={it.label}
+            value={it.value}
+            placeholder={it.placeholder}
+            onChange={it.onChange}
+            isLast={isLast}
+            onSubmit={isLast ? undefined : () => inputs.current[i + 1]?.focus()}
+          />
+        );
+      })}
     </View>
   );
 }
@@ -244,15 +261,21 @@ export function MeasurementGrid({
  * selection-style state change in the app (UnitToggle, Chip).
  */
 function MeasureCell({
+  inputRef,
   label,
   value,
   placeholder,
   onChange,
+  isLast,
+  onSubmit,
 }: {
+  inputRef: (el: TextInput | null) => void;
   label: string;
   value: string;
   placeholder?: string;
   onChange: (v: string) => void;
+  isLast: boolean;
+  onSubmit?: () => void;
 }) {
   const reducedMotion = useReducedMotion();
   const focusProgress = React.useRef(new Animated.Value(0)).current;
@@ -276,8 +299,12 @@ function MeasureCell({
     <Animated.View style={[styles.measureCell, { borderColor }]}>
       <Text style={styles.measureCellLabel}>{label}</Text>
       <TextInput
+        ref={inputRef}
         value={value}
         onChangeText={onChange}
+        returnKeyType={isLast ? 'done' : 'next'}
+        submitBehavior={isLast ? 'blurAndSubmit' : 'submit'}
+        onSubmitEditing={onSubmit}
         onFocus={() => animateTo(1)}
         onBlur={() => animateTo(0)}
         placeholder={placeholder ?? '—'}

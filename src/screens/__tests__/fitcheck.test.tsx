@@ -1,3 +1,5 @@
+import { TextInput } from 'react-native';
+import { fireEvent } from '@testing-library/react-native';
 import { renderApp, screen, userEvent, makeCore, makeReference, __fake } from './testUtils';
 
 jest.mock('../../db', () => require('./fakeDb'));
@@ -102,5 +104,29 @@ describe('FitCheck entry + Result', () => {
     await user.press(screen.getByRole('button', { name: 'Pants' }));
     await user.press(screen.getByRole('button', { name: 'Tops' }));
     expect(screen.getByLabelText('Chest').props.value ?? '').toBe('');
+  });
+});
+
+describe('Measurement keyboard flow', () => {
+  it('submit key moves to the next measurement, and only the last field says Done', async () => {
+    await openFitCheck({ garments: [makeReference()] });
+    const labels = ['Chest', 'Shoulder', 'Length', 'Sleeve', 'Waist'];
+    const fields = labels.map((l) => screen.getByLabelText(l));
+
+    fields.forEach((f, i) => {
+      const isLast = i === fields.length - 1;
+      expect(f.props.returnKeyType).toBe(isLast ? 'done' : 'next');
+      // 'submit' keeps the keyboard up on the way to the next field; only the
+      // last field blurs (dismissing the keyboard) on submit.
+      expect(f.props.submitBehavior).toBe(isLast ? 'blurAndSubmit' : 'submit');
+    });
+
+    // RN's jest mock puts focus() on TextInput's prototype, so the call's `this`
+    // is what tells us which field received focus.
+    const focus = jest.spyOn(TextInput.prototype as any, 'focus').mockImplementation(() => {});
+    for (let i = 0; i < fields.length - 1; i++) await fireEvent(fields[i], 'submitEditing');
+    expect(focus.mock.contexts.map((c: any) => c.props.accessibilityLabel)).toEqual(labels.slice(1));
+    focus.mockRestore();
+    expect(fields[fields.length - 1].props.onSubmitEditing).toBeUndefined();
   });
 });
