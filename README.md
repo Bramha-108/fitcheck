@@ -8,9 +8,12 @@ closet and tells you the closest match, the exact differences, and what that
 means in plain language. No sizing predictions, no match percentages, no
 population averages — just your own data, honestly presented.
 
-It's fully offline: everything lives in a local SQLite database on your
-device. There's no account, no backend, and no network calls anywhere in the
-app.
+It works fully offline: everything lives in a local SQLite database on your
+device. There's no account and no backend. The one network call in the app is
+an optional update check: a single request to this repo's GitHub Releases,
+made only when you tap **Check for updates** in Profile, or once a day if you
+turn on automatic checking (off by default). Nothing about your closet is
+ever sent.
 
 ## Screenshots
 
@@ -61,6 +64,14 @@ cd android && ./gradlew assembleRelease
 The APK targets `arm64-v8a` and `armeabi-v7a` (nearly all physical phones) and
 has R8 minification and resource shrinking enabled. Bump `expo.version` and
 `expo.android.versionCode` in `app.json` for every release.
+
+To make a release visible to the in-app update check, publish it on GitHub
+Releases with a tag matching `expo.version` (e.g. `v1.1.0` for `1.1.0`) and
+attach the signed `.apk`. "Download" in Profile opens that APK (or the
+release page if none is attached); Android's own installer takes it from
+there. Always sign with the same keystore. An APK signed with a different key
+can't install over the existing app, and users would have to uninstall
+(losing their local closet) to switch.
 
 Release signing (`plugins/withReleaseSigning.js`) looks for `keystore.properties`
 and a keystore under `keystore/`; if neither is present it falls back to debug
@@ -138,7 +149,8 @@ physical devices or with a screen reader — see the accessibility note in
 - `src/components/` — shared UI primitives
 - `src/utils/` — units conversion, motion constants, photo storage, and
   backup export/import (`backup.ts` for the picker/share I/O,
-  `backupFormat.ts` for the pure file format + validation)
+  `backupFormat.ts` for the pure file format + validation), and the optional
+  GitHub Releases update check (`updateCheck.ts`)
 
 ## Status
 

@@ -536,6 +536,28 @@ don't "improve" these back toward a generic guideline later:
   today is a legitimate state, not a gap — don't add one just because a
   guideline discusses illustration language.
 
+## App updates
+
+Decided 2026-10-01. FitCheck is sideloaded from GitHub Releases, so it can tell
+the user a newer version exists. It never installs anything itself.
+
+- **The only network access in the app, and only on the user's say-so.** A tap
+  on Profile's "Check for updates", or the opt-in daily check ("Check
+  automatically", off by default). `src/utils/updateCheck.ts` makes one GET
+  for public release metadata. Nothing about the closet is sent. Don't add any
+  other network use on the back of the INTERNET permission this needed.
+- **A found update is a quiet line in Profile's App updates section, never a
+  dot or badge.** No tab-bar dot, no Home nudge, no launch pop-up. The user
+  sees it when they visit Profile. This follows "no badges", "honesty over
+  urgency" and "calm over impressive" above. It was explicitly chosen over a
+  Profile-tab dot.
+- **Failure is shown only when the user asked.** A manual check that can't
+  reach GitHub says so inline. An automatic one fails silently and keeps
+  whatever was already known.
+- **"Download" only ever opens an `https://github.com/` link.** The release
+  response is untrusted input. Installing is left to Android's installer:
+  no `REQUEST_INSTALL_PACKAGES`, no in-app APK download.
+
 ## Known failure patterns — don't reintroduce these
 
 Found in the 2026-09-10 audit and fixed; listed here so future changes don't

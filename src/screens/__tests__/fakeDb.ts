@@ -28,6 +28,7 @@ interface State {
   body: BodyMeasurement[];
   units: Units;
   onboarded: boolean;
+  settings: Record<string, string>;
   nextObsId: number;
   nextBodyId: number;
   /** Set to make the next call to the named operation reject (then auto-clears). */
@@ -36,7 +37,7 @@ interface State {
 }
 
 const fresh = (): State => ({
-  garments: [], observations: [], body: [], units: 'cm', onboarded: true,
+  garments: [], observations: [], body: [], units: 'cm', onboarded: true, settings: {},
   nextObsId: 1, nextBodyId: 1, failNext: null, failAlways: null,
 });
 
@@ -53,10 +54,11 @@ export interface SeedGarment extends GarmentCore { observations?: Array<{ at: nu
 
 /** Test control surface — not part of the real db module. */
 export const __fake = {
-  reset(seed: { garments?: SeedGarment[]; body?: Array<{ at: number; m: BodyMeasurements }>; units?: Units; onboarded?: boolean } = {}) {
+  reset(seed: { garments?: SeedGarment[]; body?: Array<{ at: number; m: BodyMeasurements }>; units?: Units; onboarded?: boolean; settings?: Record<string, string> } = {}) {
     state = fresh();
     state.units = seed.units ?? 'cm';
     state.onboarded = seed.onboarded ?? true;
+    state.settings = { ...seed.settings };
     for (const { observations = [], ...core } of seed.garments ?? []) {
       state.garments.push(core);
       for (const o of observations) state.observations.push({ id: state.nextObsId++, garmentId: core.id, ...o });
@@ -71,6 +73,7 @@ export const __fake = {
     body: state.body.map((b) => ({ ...b })),
     units: state.units,
     onboarded: state.onboarded,
+    settings: { ...state.settings },
   }),
 };
 
@@ -131,6 +134,8 @@ export async function insertObservation(_db: unknown, o: Omit<FitObservation, 'i
 
 export async function getUnits() { guard('getUnits'); return state.units; }
 export async function setUnits(_db: unknown, units: Units) { guard('setUnits'); state.units = units; }
+export async function getSetting(_db: unknown, key: string) { guard('getSetting'); return state.settings[key] ?? null; }
+export async function setSetting(_db: unknown, key: string, value: string) { guard('setSetting'); state.settings[key] = value; }
 export async function getOnboarded() { guard('getOnboarded'); return state.onboarded; }
 export async function setOnboarded(_db: unknown, done: boolean) { guard('setOnboarded'); state.onboarded = done; }
 

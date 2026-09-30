@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler } from 'react-native';
+import { BackHandler, Linking } from 'react-native';
 import { SQLiteDatabase } from 'expo-sqlite';
+import * as Application from 'expo-application';
 import { BodyMeasurement, Category, DetectedGarmentInfo, FitCheckDraft, FitCheckResult, FitProfile, Garment, NewGarmentDraft, NgValidationErrors, OnboardingDraft, OnboardingStep, StretchLevel, Units } from './types';
 import { ALL_ZONE_KEYS, FITS, OB_SILHOUETTE_TAGS, keysFor } from './data/constants';
 import { buildResult } from './engine/compare';
@@ -11,6 +12,7 @@ import {
   deleteGarment as dbDeleteGarment,
   getDb,
   getOnboarded,
+  getSetting,
   getUnits,
   insertBodyMeasurement,
   insertGarment,
@@ -19,12 +21,14 @@ import {
   loadGarments,
   replaceAllData,
   setOnboarded as dbSetOnboarded,
+  setSetting,
   setUnits as dbSetUnits,
   updateGarment as dbUpdateGarment,
 } from './db';
 import { deleteGarmentPhoto, localPhotoExists, pickGarmentPhoto } from './utils/photo';
 import { BackupFile, BackupParseError, buildBackupFile, pickBackupFile, shareBackupFile } from './utils/backup';
 import { convertDraftUnits, displayToCm, formatValue } from './utils/units';
+import { AUTO_CHECK_INTERVAL_MS, AvailableUpdate, fetchLatestRelease, isNewerVersion } from './utils/updateCheck';
 
 export type Screen =
   | 'home' | 'closet' | 'detail' | 'add' | 'addManual'
@@ -230,7 +234,27 @@ interface Store {
   backupBusy: 'export' | 'import' | null;
   exportBackup: () => Promise<void>;
   importBackup: () => Promise<void>;
+
+  /** The installed app's version, or null where there isn't one (web) — Profile
+   * only shows the App updates section when this is set. */
+  installedVersion: string | null;
+  updateStatus: UpdateStatus;
+  availableUpdate: AvailableUpdate | null;
+  /** Opt-in, off by default: check GitHub at most once a day on launch. */
+  autoUpdateCheck: boolean;
+  checkForUpdate: () => Promise<void>;
+  setAutoUpdateCheck: (on: boolean) => void;
+  openUpdateDownload: () => void;
 }
+
+/** idle = not checked this session · current = checked, nothing newer ·
+ * error = a check the user asked for failed (automatic checks fail quietly). */
+export type UpdateStatus = 'idle' | 'checking' | 'current' | 'available' | 'error';
+
+const SETTING_AUTO_UPDATE = 'updates.auto';
+const SETTING_LAST_UPDATE_CHECK = 'updates.lastCheck';
+const SETTING_AVAILABLE_UPDATE = 'updates.available';
+const INSTALLED_VERSION = Application.nativeApplicationVersion ?? null;
 
 const StoreContext = createContext<Store | null>(null);
 
@@ -310,6 +334,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dbRef = useRef<SQLiteDatabase | null>(null);
   const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
+  const [availableUpdate, setAvailableUpdateState] = useState<AvailableUpdate | null>(null);
+  // Mirrors availableUpdate for async callbacks that outlive the render they
+  // started in (a failed automatic check restores 'available' from this).
+  const availableUpdateRef = useRef<AvailableUpdate | null>(null);
+  const setAvailableUpdate = (u: AvailableUpdate | null) => {
+    availableUpdateRef.current = u;
+    setAvailableUpdateState(u);
+  };
+  const [autoUpdateCheck, setAutoUpdateCheckState] = useState(false);
+  const checkingRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -326,6 +361,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (gs.length) setSelectedId(gs[0].id);
         if (!onboarded) setObStep('welcome');
         setReady(true);
+        initUpdates(db);
       } catch {
         // A failed open/read here means the app has no data to show at all —
         // never leave Shell's `!ready` branch rendering an unexplained blank
@@ -338,6 +374,79 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [initAttempt]);
 
   const profile = useMemo(() => computeFitProfile(garments, units), [garments, units]);
+
+  // App updates (utils/updateCheck.ts): the only network access FitCheck has,
+  // and only on the user's say-so — a tap on "Check for updates", or the opt-in
+  // daily check. Settings persistence here is best-effort: failing to remember
+  // a timestamp must never surface as an error for something the user didn't do.
+  const persistSetting = (key: string, value: string) => {
+    const db = dbRef.current;
+    if (db) setSetting(db, key, value).catch(() => {});
+  };
+
+  const lastUpdateCheckDue = async (db: SQLiteDatabase) =>
+    Date.now() - Number((await getSetting(db, SETTING_LAST_UPDATE_CHECK)) ?? 0) >= AUTO_CHECK_INTERVAL_MS;
+
+  // `userInitiated` decides whether a failure is shown: an automatic check that
+  // can't reach GitHub (offline, say) stays silent and keeps whatever was known.
+  const runUpdateCheck = async (userInitiated: boolean) => {
+    if (!INSTALLED_VERSION || checkingRef.current) return;
+    checkingRef.current = true;
+    setUpdateStatus('checking');
+    try {
+      const latest = await fetchLatestRelease();
+      persistSetting(SETTING_LAST_UPDATE_CHECK, String(Date.now()));
+      if (isNewerVersion(latest.version, INSTALLED_VERSION)) {
+        setAvailableUpdate(latest);
+        setUpdateStatus('available');
+        persistSetting(SETTING_AVAILABLE_UPDATE, JSON.stringify(latest));
+      } else {
+        setAvailableUpdate(null);
+        setUpdateStatus('current');
+        persistSetting(SETTING_AVAILABLE_UPDATE, '');
+      }
+    } catch {
+      setUpdateStatus(availableUpdateRef.current ? 'available' : userInitiated ? 'error' : 'idle');
+    } finally {
+      checkingRef.current = false;
+    }
+  };
+  const checkForUpdate = () => runUpdateCheck(true);
+
+  const initUpdates = async (db: SQLiteDatabase) => {
+    if (!INSTALLED_VERSION) return;
+    try {
+      const [auto, saved] = await Promise.all([getSetting(db, SETTING_AUTO_UPDATE), getSetting(db, SETTING_AVAILABLE_UPDATE)]);
+      setAutoUpdateCheckState(auto === '1');
+      // A previously found update stays visible across launches — until the user
+      // has installed it (or anything newer), at which point it's dropped.
+      let parsed: AvailableUpdate | null = null;
+      try { parsed = saved ? (JSON.parse(saved) as AvailableUpdate) : null; } catch { parsed = null; }
+      if (parsed && typeof parsed.url === 'string' && parsed.url.startsWith('https://github.com/') && isNewerVersion(parsed.version, INSTALLED_VERSION)) {
+        setAvailableUpdate(parsed);
+        setUpdateStatus('available');
+      } else if (saved) {
+        persistSetting(SETTING_AVAILABLE_UPDATE, '');
+      }
+      if (auto === '1' && (await lastUpdateCheckDue(db))) runUpdateCheck(false);
+    } catch {
+      // Update bookkeeping is never worth blocking or erroring the app over.
+    }
+  };
+
+  const setAutoUpdateCheck = (on: boolean) => {
+    setAutoUpdateCheckState(on);
+    persistSetting(SETTING_AUTO_UPDATE, on ? '1' : '0');
+    // Turning it on checks right away if a check is due, rather than waiting
+    // for the next launch to do anything visible.
+    const db = dbRef.current;
+    if (on && db) lastUpdateCheckDue(db).then((due) => { if (due) runUpdateCheck(false); }).catch(() => {});
+  };
+
+  const openUpdateDownload = () => {
+    if (!availableUpdate) return;
+    Linking.openURL(availableUpdate.url).catch(() => showToast("Couldn't open the download link."));
+  };
 
   const refresh = async () => {
     const db = dbRef.current;
@@ -1077,6 +1186,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     loadEditGarment, startGarmentFromResult, pickNgPhoto, deleteGarmentById,
     openSheet, closeSheet, setSheetArea, setSheetVerdict, setSheetLook, setSheetComfortNote, saveFit,
     backupBusy, exportBackup, importBackup,
+    installedVersion: INSTALLED_VERSION, updateStatus, availableUpdate, autoUpdateCheck, checkForUpdate, setAutoUpdateCheck, openUpdateDownload,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

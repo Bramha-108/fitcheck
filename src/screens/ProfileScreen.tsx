@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 // From gesture-handler, not react-native — see HomeScreen.tsx's identical note.
 import { ScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -187,11 +187,68 @@ export default function ProfileScreen({ scrollRef }: { scrollRef?: React.RefObje
         />
       </View>
       {tracked === 0 && <Text style={styles.bodySub}>Add a garment first — there's nothing to back up yet.</Text>}
+
+      {store.installedVersion && <AppUpdates />}
     </ScrollView>
   );
 }
 
+// The only place FitCheck goes online, and only when asked: a tap here, or the
+// opt-in daily check. A found update is a quiet line in this section — never a
+// badge or dot elsewhere (DESIGN_GUIDELINES.md's app-update decision).
+function AppUpdates() {
+  const store = useStore();
+  const { updateStatus: status, availableUpdate } = store;
+  const checking = status === 'checking';
+
+  const statusLine =
+    status === 'available' && availableUpdate
+      ? `Version ${availableUpdate.version} is available. Installing it over this one keeps your closet.`
+      : status === 'current'
+        ? "You're on the latest version."
+        : status === 'error'
+          ? "Couldn't reach GitHub. Check your connection and try again."
+          : null;
+
+  return (
+    <>
+      <SectionLabel>App updates</SectionLabel>
+      <Text style={styles.bodySub}>
+        You're on version {store.installedVersion}. Checking asks GitHub for the latest release — nothing about
+        your closet is sent.
+      </Text>
+      <View style={{ marginTop: SPACING.md }}>
+        {status === 'available' && availableUpdate ? (
+          <SecondaryButton label={`Download version ${availableUpdate.version}`} onPress={store.openUpdateDownload} />
+        ) : (
+          <SecondaryButton label={checking ? 'Checking…' : 'Check for updates'} onPress={store.checkForUpdate} disabled={checking} />
+        )}
+      </View>
+      {statusLine && (
+        <Text style={[styles.bodySub, status === 'available' && styles.updateAvailable]} accessibilityLiveRegion="polite">
+          {statusLine}
+        </Text>
+      )}
+      <View style={styles.toggleRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.rangeLabel}>Check automatically</Text>
+          <Text style={styles.bodySub}>Once a day, when you open FitCheck.</Text>
+        </View>
+        <Switch
+          value={store.autoUpdateCheck}
+          onValueChange={store.setAutoUpdateCheck}
+          trackColor={{ false: COLORS.border, true: COLORS.ink }}
+          thumbColor={COLORS.card}
+          accessibilityLabel="Check for updates automatically"
+        />
+      </View>
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginTop: SPACING.lg, minHeight: 44 },
+  updateAvailable: { color: COLORS.ink },
   trendCard: { backgroundColor: COLORS.ink, borderRadius: RADII.xl, padding: SPACING.lg, paddingHorizontal: SPACING.xl, marginTop: SPACING.xl - 2 },
   trendText: { color: COLORS.cream, fontSize: 16, lineHeight: 22, marginTop: 9, fontFamily: FONTS.regular },
   trendNote: { color: 'rgba(246,245,242,0.6)', fontSize: 12.5, marginTop: 9, lineHeight: 18, fontFamily: FONTS.regular },

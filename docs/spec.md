@@ -13,6 +13,13 @@
 ## Architecture (decided 2026-09-08): fully offline, local-only
 No server, no account/login, no cloud database, no cloud AI, no analytics, no remote API, no retailer API. Everything — garments, measurements, fit types, fit feedback, fit history, photo references, and the matching engine itself — runs and stays on-device. This isn't just a privacy nicety, it's the right architecture for a single-user personal app: nothing here needs to sync across devices or survive the app being deleted and reinstalled elsewhere. Local SQLite for structured data, local photo references (per Feature 1), and a **deterministic, rules-based local fit engine** (not machine learning) — v1 doesn't need a trained model, a normalize → find-similar-in-category → compare-measurements → compare-fit-type → compare-user-feedback-history → generate-explanation pipeline gets most of the value with none of the complexity or training-data-cold-start problem.
 
+**Amended 2026-10-01: optional app-update check.** FitCheck is sideloaded from GitHub
+Releases. The one exception to "no remote API" is a check for a newer release. It makes a
+single anonymous GET for public release metadata, only when the user taps "Check for
+updates" in Profile or opts into a daily automatic check (off by default). No closet data is
+ever sent, the app still works fully offline, and installing is left to Android's own
+installer. See [DESIGN_GUIDELINES.md](../DESIGN_GUIDELINES.md)'s "App updates" section.
+
 ---
 
 ## Core concept

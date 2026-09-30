@@ -339,6 +339,25 @@ export async function setUnits(db: SQLite.SQLiteDatabase, units: Units): Promise
   });
 }
 
+/** A plain key/value read from `settings`, for preferences that don't need their
+ * own typed accessor (the app-update check's toggle/timestamps). Null if unset. */
+export async function getSetting(db: SQLite.SQLiteDatabase, key: string): Promise<string | null> {
+  return withDbError('getSetting', async () => {
+    const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', key);
+    return row?.value ?? null;
+  });
+}
+
+export async function setSetting(db: SQLite.SQLiteDatabase, key: string, value: string): Promise<void> {
+  return withDbError('setSetting', async () => {
+    await db.runAsync(
+      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      key,
+      value
+    );
+  });
+}
+
 /** Whether the first-run onboarding wizard has already been shown/dismissed. */
 export async function getOnboarded(db: SQLite.SQLiteDatabase): Promise<boolean> {
   return withDbError('getOnboarded', async () => {
