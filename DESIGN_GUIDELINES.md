@@ -288,6 +288,15 @@ toward the generic guideline later:
   question a user actually has is "how has *this* shirt changed," not "show me
   every historical event." Home's "Recent fit changes" already gives a
   lightweight cross-garment overview without needing a fifth destination.
+- **Top-level destinations are roots, not back-stack entries.** (Added
+  2026-10-01.) `store.go()` clears `history` whenever it lands on
+  home/closet/fitcheck/profile — whether from a tab tap, a swipe, or an
+  in-screen link — and only pushes onto it for focused-workflow screens. So
+  Back from any tab goes to Home, then exits (standard Android bottom-nav
+  behavior), and Back inside a flow (Closet → Detail) still returns to where
+  that flow started. Pushing every tab switch was a real bug: Closet → FitCheck
+  → Profile → Closet… made Back replay each visited tab in turn. Covered by
+  `navigation.test.tsx`.
 - **Tab bar visibility is derived, not hardcoded per-screen.** `isFocusedWorkflow()`
   is the single source of truth for which screens hide the tab bar
   (`detail`, `add`, `addManual`, `result` today) — add new focused

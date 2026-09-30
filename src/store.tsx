@@ -354,9 +354,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Real back-stack (not a fixed screen->screen map) so Back always lands on
-  // wherever the user actually came from, however they got there.
+  // wherever the user actually came from, however they got there — within a
+  // flow. The four top-level destinations are roots, not stack entries: going to
+  // one (tab tap, swipe, or an in-screen link like Home's "Run a FitCheck")
+  // clears the stack, so Back from any of them lands on Home and then exits,
+  // instead of replaying every tab the user happened to visit on the way.
   const go = (to: Screen) => {
-    if (to !== screen) setHistory((h) => [...h, screen]);
+    if (!isFocusedWorkflow(to)) setHistory([]);
+    else if (to !== screen) setHistory((h) => [...h, screen]);
     setScreen(to);
     setToast(null);
     if (to === 'addManual' && ng.id == null) {
