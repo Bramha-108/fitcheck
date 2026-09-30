@@ -1,4 +1,7 @@
+import { StyleSheet } from 'react-native';
+import { fireEvent } from '@testing-library/react-native';
 import { renderApp, screen, userEvent, makeReference, __fake } from './testUtils';
+import { photo } from './nativeMocks';
 
 jest.mock('../../db', () => require('./fakeDb'));
 jest.mock('../../utils/photo', () => require('./nativeMocks').photo);
@@ -121,5 +124,24 @@ describe('Add garment (manual entry)', () => {
     expect(await screen.findByText(/Couldn't save/i)).toBeTruthy();
     expect(__fake.snapshot().garments).toHaveLength(0);
     expect(valueOf('Product name')).toBe('Linen Shirt');
+  });
+
+  it('shows a picked photo right away, and a re-picked one replaces it, without leaving the screen', async () => {
+    const user = await openAddManual();
+    const preview = (uri: string) => screen.container.queryAll((n) => n.props.source?.uri === uri)[0];
+    const opacityOf = (uri: string) => StyleSheet.flatten(preview(uri).props.style).opacity;
+
+    photo.pickGarmentPhoto.mockResolvedValueOnce('file:///app/photos/g-1.jpg');
+    await user.press(screen.getByRole('button', { name: 'Attach photo from library' }));
+    expect(await screen.findByRole('button', { name: 'Garment photo, tap to change' })).toBeTruthy();
+    await fireEvent(preview('file:///app/photos/g-1.jpg'), 'load');
+    expect(opacityOf('file:///app/photos/g-1.jpg')).toBe(1);
+
+    // Changing the photo resets the fade for the new source, then its own load reveals it.
+    photo.pickGarmentPhoto.mockResolvedValueOnce('file:///app/photos/g-2.jpg');
+    await user.press(screen.getByRole('button', { name: 'Garment photo, tap to change' }));
+    expect(opacityOf('file:///app/photos/g-2.jpg')).toBe(0);
+    await fireEvent(preview('file:///app/photos/g-2.jpg'), 'load');
+    expect(opacityOf('file:///app/photos/g-2.jpg')).toBe(1);
   });
 });

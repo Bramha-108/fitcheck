@@ -365,11 +365,16 @@ export function FadeImage({ uri, style, resizeMode, instant, accessibilityLabel 
   const opacity = React.useRef(new Animated.Value(instant ? 1 : 0)).current;
   const mounted = React.useRef(false);
 
-  React.useEffect(() => {
-    // Skip the very first run when `instant` asked to start already-visible
-    // (e.g. a shared-element transition overlay is handling the reveal instead) —
-    // only a genuine later change of `uri` should reset back to invisible.
-    if (mounted.current || !instant) opacity.setValue(0);
+  // Only a genuine later change of `uri` resets to invisible — the first mount
+  // already starts at the right opacity (0, or 1 for `instant`). A layout effect,
+  // not a passive one: setValue(0) also cancels any running fade, and a passive
+  // effect can run *after* a fast local file's onLoad has already started the
+  // fade-in (a freshly-picked photo, just copied into app storage, is exactly
+  // that) — which pinned the image at opacity 0 until the screen remounted. A
+  // layout effect runs in the same commit that hands the Image its new source,
+  // so the reset always lands before that source's onLoad can.
+  React.useLayoutEffect(() => {
+    if (mounted.current) opacity.setValue(0);
     mounted.current = true;
   }, [uri]);
 
