@@ -41,6 +41,42 @@ describe('Garment detail', () => {
     expect(observations[0].note).toBe('Fits great');
   });
 
+  it('fit update opens with nothing picked, and cannot be saved until area and comfort are chosen', async () => {
+    const user = await openDetail({ garments: [makeReference()] });
+    const before = __fake.snapshot().observations.length;
+    await user.press(screen.getByRole('button', { name: 'Update how it fits' }));
+    await screen.findByText('How does it fit today?');
+
+    for (const name of ['Chest', 'Shoulder', 'Too tight', 'Tight', 'Good', 'Loose', 'Too loose', 'Looks too baggy']) {
+      expect(screen.getByRole('button', { name }).props.accessibilityState?.selected).toBe(false);
+    }
+    expect(screen.getByLabelText('Visual preference').props.value).toBe('');
+
+    const save = () => screen.getByRole('button', { name: /^Pick|^Add to fit history$/ });
+    expect(save().props.accessibilityState?.disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Pick an area and how it feels' })).toBeTruthy();
+    await user.press(save());
+    expect(__fake.snapshot().observations).toHaveLength(before); // nothing invented
+
+    await user.press(screen.getByRole('button', { name: 'Waist' }));
+    expect(screen.getByRole('button', { name: 'Pick how it feels' }).props.accessibilityState?.disabled).toBe(true);
+    await user.press(screen.getByRole('button', { name: 'Good' }));
+    expect(save().props.accessibilityState?.disabled).toBe(false);
+    await user.press(screen.getByRole('button', { name: 'Add to fit history' }));
+
+    expect(await screen.findByText('Added to fit history — earlier entries kept.')).toBeTruthy();
+    const { observations } = __fake.snapshot();
+    expect(observations).toHaveLength(before + 1);
+    expect(observations[observations.length - 1]).toMatchObject({ comfort: [{ area: 'Waist', verdict: 'Good' }] });
+    expect(observations[observations.length - 1].visual ?? undefined).toBeUndefined();
+
+    // The next update starts blank again rather than inheriting these picks.
+    await user.press(screen.getByRole('button', { name: 'Update how it fits' }));
+    await screen.findByText('How does it fit today?');
+    expect(screen.getByRole('button', { name: 'Waist' }).props.accessibilityState?.selected).toBe(false);
+    expect(screen.getByRole('button', { name: 'Good' }).props.accessibilityState?.selected).toBe(false);
+  });
+
   it('a failed fit update is reported and nothing is lost', async () => {
     const user = await openDetail({ garments: [makeReference()] });
     const before = __fake.snapshot();

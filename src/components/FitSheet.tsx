@@ -36,6 +36,13 @@ export default function FitSheet() {
   if (!visible || !g) return null;
 
   const areas = keysFor(g.cat).map(([, label]) => label);
+  // Area + comfort verdict are the entry itself; visual preference and notes stay
+  // optional. The disabled button says what's still missing rather than going
+  // silently inert (Screen checklist #22).
+  const canSave = !!store.sArea && !!store.sVerdict;
+  const missingLabel = !store.sArea && !store.sVerdict
+    ? 'Pick an area and how it feels'
+    : !store.sArea ? 'Pick an area' : 'Pick how it feels';
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -104,7 +111,11 @@ export default function FitSheet() {
         </ScrollView>
 
         <View style={styles.footer}>
-          <PrimaryButton label="Add to fit history" onPress={store.saveFit} />
+          <PrimaryButton
+            label={canSave ? 'Add to fit history' : missingLabel}
+            onPress={store.saveFit}
+            disabled={!canSave}
+          />
         </View>
       </Animated.View>
     </KeyboardAvoidingView>

@@ -280,9 +280,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     req?.onConfirm();
   };
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sArea, setSArea] = useState('Shoulder');
-  const [sVerdict, setSVerdict] = useState('Good');
-  const [sLook, setSLook] = useState('Love the relaxed silhouette');
+  // Every fit update starts blank — no area, verdict, or visual note the user
+  // didn't pick (DESIGN_GUIDELINES.md's Measurement integrity). A pre-selected
+  // "Good at the shoulder" would be saved as a real observation by a user who
+  // only meant to add a note.
+  const [sArea, setSArea] = useState('');
+  const [sVerdict, setSVerdict] = useState('');
+  const [sLook, setSLook] = useState('');
   const [sComfortNote, setSComfortNote] = useState('');
   const [ng, setNgState] = useState<NewGarmentDraft>(EMPTY_NG);
   const [ngErrors, setNgErrors] = useState<NgValidationErrors | null>(null);
@@ -952,12 +956,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Each update is a new timeline entry, so it never inherits the previous one's
+  // picks either — that would be the same pre-fill, one session later.
   const openSheet = () => {
-    const g = garments.find((x) => x.id === selectedId);
-    if (g) {
-      const areas = keysFor(g.cat).map(([, label]) => label);
-      if (!areas.includes(sArea)) setSArea(areas[0]);
-    }
+    setSArea('');
+    setSVerdict('');
+    setSLook('');
     setSComfortNote('');
     setSheetOpen(true);
   };
@@ -969,6 +973,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const saveFit = async () => {
     const db = dbRef.current;
     if (!db) return;
+    // An entry means "this area felt like this" — both are required (FitSheet
+    // keeps its button disabled until then; this is the backstop).
+    if (!sArea || !sVerdict) return;
     setSheetOpen(false);
     // A typed note replaces the templated one (spec.md Feature 1: "a quick tag ...
     // plus optional free text") rather than sitting alongside it — the templated
