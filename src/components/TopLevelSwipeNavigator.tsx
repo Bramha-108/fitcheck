@@ -159,10 +159,15 @@ export default function TopLevelSwipeNavigator() {
           clearDrag();
           store.go(d.screen);
           pendingScreenRef.current = null;
-          // Safe to reset now: the idle render below never reads translateX/baseX,
-          // so this can never flash the just-settled pane back to its pre-drag spot.
-          translateX.setValue(0);
-          baseX.setValue(0);
+          // Deliberately NOT resetting translateX/baseX here. These are native-driven,
+          // so a setValue reaches the native view immediately — a frame or more before
+          // React commits the swap (just queued above) from the two-pane row to the idle
+          // branch. Resetting here redrew the still-mounted row at offset 0 — the *old*
+          // screen's pane — for one frame: a visible flash of the previous screen right
+          // after every committed swipe (confirmed frame-by-frame on device). Leaving
+          // them stale is safe because the two branches below have different `key`s: the
+          // idle branch mounts a fresh native view (it never reads these values), and the
+          // next drag's onUpdate sets both before its two-pane row mounts.
         });
       } else {
         settle(0, (finished) => { if (finished) clearDrag(); });
@@ -178,11 +183,16 @@ export default function TopLevelSwipeNavigator() {
       if (dragRef.current) settle(0, (finished) => { if (finished) clearDrag(); });
     });
 
+  // The two branches carry different keys on purpose. Without them React reuses
+  // one native view across the swap, and that view keeps the native-driven offset
+  // from the drag (a full screen width) while now holding a single pane — a blank
+  // screen after every committed swipe. Distinct keys mount a fresh view instead,
+  // in the same commit that removes the two-pane row.
   let content: React.ReactNode;
   if (drag) {
     const panes = drag.dir === 'prev' ? [drag.screen, store.screen] : [store.screen, drag.screen];
     content = (
-      <Animated.View style={[styles.row, { width: width * 2, transform: [{ translateX: containerX }] }]}>
+      <Animated.View key="pair" style={[styles.row, { width: width * 2, transform: [{ translateX: containerX }] }]}>
         {panes.map((s) => (
           <View key={s} style={{ width }}>
             {renderTopLevel(s, scrollRefs)}
@@ -194,15 +204,15 @@ export default function TopLevelSwipeNavigator() {
     // Deliberately reads edgeX here, never translateX/baseX — this is the idle/
     // settled state (plus the same-screen edge-resistance nudge, which is what
     // edgeX is for). Driving this off translateX/baseX, the same pair the
-    // two-pane commit path above uses, was the source of a real bug: committing
-    // to a new screen resets those two via imperative .setValue calls, which take
-    // effect on the still-mounted two-pane view a frame or more before React's own
-    // re-render (which swaps *this* branch in) commits — a visible snap back to
-    // the pre-drag position, with the previous screen briefly showing again, right
-    // as the transition was supposed to have finished. edgeX is never touched by
-    // that commit path, so this branch can't replay a stale commit-drag position.
+    // two-pane commit path above uses, was the source of a real bug: those two hold
+    // stale commit-drag positions between swipes, and any imperative .setValue on
+    // them takes effect on whatever view is mounted a frame or more before React's
+    // own re-render commits — a visible snap back to the pre-drag position, with the
+    // previous screen briefly showing again. (The same mechanism is why the commit
+    // path above no longer resets them at all.) edgeX is never touched by the commit
+    // path, so this branch can't replay a stale commit-drag position.
     content = (
-      <Animated.View style={{ flex: 1, transform: [{ translateX: edgeX }] }}>
+      <Animated.View key="idle" style={{ flex: 1, transform: [{ translateX: edgeX }] }}>
         {renderTopLevel(store.screen, scrollRefs)}
       </Animated.View>
     );
