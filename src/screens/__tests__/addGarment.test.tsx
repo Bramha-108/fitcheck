@@ -12,7 +12,6 @@ async function openAddManual(seed: Parameters<typeof renderApp>[0] = {}) {
   const user = userEvent.setup();
   await user.press(screen.getByRole('tab', { name: 'Closet' }));
   await user.press(screen.getByRole('button', { name: 'Add garment' }));
-  await user.press(screen.getByRole('button', { name: /^Manual entry/ }));
   await screen.findByText('Garment details');
   return user;
 }

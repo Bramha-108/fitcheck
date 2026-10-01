@@ -12,7 +12,6 @@ import { StoreProvider, useStore, isFocusedWorkflow } from './src/store';
 import { MOTION, useReducedMotion } from './src/utils/motion';
 import { PrimaryButton } from './src/components/UI';
 import DetailScreen from './src/screens/DetailScreen';
-import AddScreen from './src/screens/AddScreen';
 import AddManualScreen from './src/screens/AddManualScreen';
 import ResultScreen from './src/screens/ResultScreen';
 import TopLevelSwipeNavigator from './src/components/TopLevelSwipeNavigator';
@@ -30,7 +29,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 // TopLevelSwipeNavigator instead, which owns swiping between them — see
 // DESIGN_GUIDELINES.md's navigation decisions for why this stays a single
 // state-driven `store.screen`, not a second navigation stack.
-// Fade + rise entrance for the four focused-workflow screens reached through the
+// Fade + rise entrance for the focused-workflow screens reached through the
 // plain switch below. Result is deliberately excluded — it already has its own,
 // more elaborate staged reveal (MOTION.compareReveal); layering a second generic
 // fade+slide on top would be motion-on-motion. The four top-level destinations
@@ -72,7 +71,6 @@ function CurrentScreen() {
   const store = useStore();
   switch (store.screen) {
     case 'detail': return <ScreenEnter><DetailScreen /></ScreenEnter>;
-    case 'add': return <ScreenEnter><AddScreen /></ScreenEnter>;
     case 'addManual': return <ScreenEnter><AddManualScreen /></ScreenEnter>;
     case 'result': return <ResultScreen />;
     default: return <TopLevelSwipeNavigator />;

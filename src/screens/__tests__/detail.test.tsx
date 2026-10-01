@@ -126,6 +126,34 @@ describe('Garment detail', () => {
     expect(snap.observations).toEqual(obsBefore);
   });
 
+  it('"+ Add" after an edit starts a blank new garment, never the edited one', async () => {
+    for (const finishEdit of ['abandon', 'save'] as const) {
+      const user = await openDetail({ garments: [makeReference()] });
+      await user.press(screen.getByRole('button', { name: 'Edit' }));
+      expect((await screen.findByLabelText('Product name')).props.value).toBe('Oxford Shirt');
+      if (finishEdit === 'save') {
+        await user.press(screen.getByRole('button', { name: 'Save changes' }));
+        await screen.findByText('Garment updated.');
+      } else {
+        await user.press(screen.getByLabelText(/^Back/)); // edit form -> detail
+      }
+      await user.press(screen.getAllByLabelText(/^Back/)[0]); // detail -> closet
+      await user.press(await screen.findByRole('button', { name: 'Add garment' }));
+
+      for (const label of ['Brand', 'Product name', 'Size', 'Chest']) expect(screen.getByLabelText(label).props.value ?? '').toBe('');
+      await user.type(screen.getByLabelText('Brand'), 'Muji');
+      await user.type(screen.getByLabelText('Product name'), 'Linen Tee');
+      await user.type(screen.getByLabelText('Size'), 'L');
+      await user.type(screen.getByLabelText('Chest'), '56');
+      await user.press(screen.getByRole('button', { name: 'Save to closet' }));
+      await screen.findByLabelText(/Muji Linen Tee/);
+
+      const { garments } = __fake.snapshot();
+      expect(garments).toHaveLength(2); // added, not overwritten
+      expect(garments.find((g) => g.name === 'Oxford Shirt')).toBeTruthy();
+    }
+  });
+
   it('caps a long fit history behind "Show all N entries"', async () => {
     const many = Array.from({ length: 9 }, (_, i) => ({
       at: Date.now() - (9 - i) * 86_400_000,

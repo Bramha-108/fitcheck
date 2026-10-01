@@ -40,14 +40,14 @@ function NoComparisonYet() {
               title: 'Nothing to compare yet',
               body: `You don't have any ${categoryLabel} saved yet. Add one you already know fits, then compare against it.`,
               primaryLabel: 'Add a garment',
-              onPrimary: () => store.go('add'),
+              onPrimary: () => store.go('addManual'),
               showSecondary: true,
             }
           : {
               title: 'Nothing to compare yet',
               body: 'Your closet is empty — FitCheck needs at least one saved garment to find a fit you already know.',
               primaryLabel: 'Add your first garment',
-              onPrimary: () => store.go('add'),
+              onPrimary: () => store.go('addManual'),
               showSecondary: true,
             };
 

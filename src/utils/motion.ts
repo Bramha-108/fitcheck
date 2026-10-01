@@ -46,7 +46,7 @@ export const MOTION = {
   selection: 150,
   /** Press-down/release on any tappable control — buttons, chips — quick, tactile. */
   press: 140,
-  /** A focused-workflow screen (detail/add/addManual) fading and rising in
+  /** A focused-workflow screen (detail/addManual) fading and rising in
    * through the plain screen switch — quiet arrival. Not used by Result (own staged
    * reveal) or by the top-level swipe destinations (TopLevelSwipeNavigator owns
    * their transition). */

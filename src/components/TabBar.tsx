@@ -6,7 +6,7 @@ import { Screen, useStore } from '../store';
 
 const TABS: { key: Screen; label: string; group: Screen[] }[] = [
   { key: 'home', label: 'Home', group: ['home'] },
-  { key: 'closet', label: 'Closet', group: ['closet', 'detail', 'add', 'addManual'] },
+  { key: 'closet', label: 'Closet', group: ['closet', 'detail', 'addManual'] },
   { key: 'fitcheck', label: 'FitCheck', group: ['fitcheck', 'result'] },
   { key: 'profile', label: 'Profile', group: ['profile'] },
 ];

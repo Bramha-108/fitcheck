@@ -31,10 +31,10 @@ import { convertDraftUnits, displayToCm, formatValue } from './utils/units';
 import { AUTO_CHECK_INTERVAL_MS, AvailableUpdate, UpdateCheckError, fetchLatestRelease, isNewerVersion } from './utils/updateCheck';
 
 export type Screen =
-  | 'home' | 'closet' | 'detail' | 'add' | 'addManual'
+  | 'home' | 'closet' | 'detail' | 'addManual'
   | 'fitcheck' | 'result' | 'profile';
 
-const FOCUSED_WORKFLOW_SCREENS: ReadonlySet<Screen> = new Set(['detail', 'add', 'addManual', 'result']);
+const FOCUSED_WORKFLOW_SCREENS: ReadonlySet<Screen> = new Set(['detail', 'addManual', 'result']);
 
 export interface Rect { x: number; y: number; width: number; height: number }
 export interface PhotoTransition { garmentId: number; uri: string; from: Rect; to: Rect | null }
@@ -482,7 +482,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     else if (to !== screen) setHistory((h) => [...h, screen]);
     setScreen(to);
     setToast(null);
-    if (to === 'addManual' && ng.id == null) {
+    // go('addManual') only ever means "add a new garment" — editing and
+    // "save this result as a garment" load their own draft and set the screen
+    // directly. So always start blank: a leftover edit draft (its garment id still
+    // set after Back or after saving an edit) used to survive here, so "+ Add"
+    // opened that garment's data and Save overwrote it instead of adding one.
+    if (to === 'addManual') {
       setNgState(EMPTY_NG);
       setNgErrors(null);
     }

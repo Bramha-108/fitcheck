@@ -237,8 +237,8 @@ entered and displayed.
    keyboard all push a "short" form past that height. Chip groups inside a
    sheet wrap at natural width. Never force N chips into N equal columns,
    because a label like "Too loose" then breaks mid-word. Don't use a
-   bottom sheet for something that's actually the start of a new multi-step flow
-   (see the Add-source decision below) — that's a full screen, correctly.
+   bottom sheet for something that's actually the start of a new multi-step flow.
+   Adding a garment is a full screen (the Add Garment form), correctly.
 7. **Don't navigate away from context unnecessarily.** If a decision can be
    made without leaving the screen the user is looking at, keep them on it
    (this is *why* rule 6 exists).
@@ -283,10 +283,16 @@ entered and displayed.
 Explicit calls made 2026-09-10 so these don't get re-litigated or "fixed" back
 toward the generic guideline later:
 
-- **Add-source picker (Photo/Manual/Screenshot) stays a full screen.** It's the
-  start of a multi-step flow, not a small contextual choice — a bottom sheet
-  would be mechanically "more compliant" with rule 6 but architecturally wrong
-  for what this step actually is. `AddScreen.tsx` is correct as-is.
+- **"+ Add" opens the Add Garment form directly. There's no source-picker
+  screen.** (Decided 2026-10-01, replacing the earlier "Add-source picker stays
+  a full screen" decision.) The picker existed for three genuinely different
+  routes (photo OCR, screenshot OCR, manual). Once the OCR routes were removed
+  (2026-09-11, below), it was left offering "Manual entry" and "Garment photo"
+  cards that both opened the same form. The photo card also described storage
+  wrongly ("linked by reference"; photos are copied into app storage). A
+  chooser whose options all lead to the same place is an extra tap and a false
+  choice. The photo is a field on the form. Don't reintroduce a picker unless
+  there's a second route that actually does something different.
 - **No long-press context menu, for now.** Deferred per rule 13. If the closet
   grid ever gets crowded enough that per-tile visible actions become clutter,
   the future shape is: long-press a tile → sheet with Edit / Compare / History
@@ -315,7 +321,7 @@ toward the generic guideline later:
   `navigation.test.tsx`.
 - **Tab bar visibility is derived, not hardcoded per-screen.** `isFocusedWorkflow()`
   is the single source of truth for which screens hide the tab bar
-  (`detail`, `add`, `addManual`, `result` today) — add new focused
+  (`detail`, `addManual`, `result` today) — add new focused
   screens to that one set rather than checking screen names in components.
 - **The Closet→Detail shared-element photo transition is a floating overlay on
   top of the existing screen swap, not a navigation-stack feature.** (Added
@@ -384,7 +390,7 @@ when it's on).
 | Bottom sheet present/dismiss | Physical, grounded | `MOTION.sheet` (260ms) | `FitSheet.tsx` |
 | Top-level swipe (Home↔Closet↔FitCheck↔Profile) | Smooth, spatial, quiet | `MOTION.nav` (240ms) | `TopLevelSwipeNavigator.tsx` |
 | Press feedback (any button or chip) | Tactile, immediate | `MOTION.press` (140ms) | `UI.tsx`'s `usePressScale` |
-| Focused-workflow entrance (detail/add/addManual) | Quiet arrival | `MOTION.screenEnter` (240ms) | `App.tsx`'s `ScreenEnter` |
+| Focused-workflow entrance (detail/addManual) | Quiet arrival | `MOTION.screenEnter` (240ms) | `App.tsx`'s `ScreenEnter` |
 | Garment photo finishing load | Quiet, no pop-in | `MOTION.imageFade` (220ms) | `UI.tsx`'s `FadeImage` (used by `PhotoTile`) |
 | Closet tile photo → Detail hero photo | Smooth, spatial, premium | `MOTION.heroTransition` (320ms) | `PhotoTransitionOverlay.tsx`, driven by `store.photoTransition` |
 | New fit-history entry joining the timeline | Subtle, reassuring — accumulates, never overwrites | `MOTION.save` (260ms, reused) | `DetailScreen.tsx`'s `newEntryProgress` |
@@ -529,7 +535,8 @@ don't "improve" these back toward a generic guideline later:
   not just kept honest.** It was a UI-only simulation (fixed fake values on a timer,
   no real image ever read) — rather than leave that preview sitting in the app
   implying a capability that doesn't exist, Add Garment now offers Manual entry
-  only. Don't re-add a "Photo or screenshot" option without real on-device
+  only (and since 2026-10-01 the leftover chooser is gone too; see the navigation
+  decisions above). Don't re-add a "Photo or screenshot" option without real on-device
   extraction behind it. Onboarding's own smaller photo/screenshot demo is a
   separate decision, untouched by this one.
 - **No illustrations until there's a reason for one.** Zero illustrations
@@ -596,6 +603,7 @@ casually walk back into them.
 | Fit-update sheet pre-selected as real values | `store.tsx`'s sheet state started as `sArea: 'Shoulder'`, `sVerdict: 'Good'`, `sLook: 'Love the relaxed silhouette'`, and later opens kept the previous entry's picks — tapping "Add to fit history" without choosing anything saved "Good at the shoulder" plus a visual note the user never picked | Violates Measurement integrity and "Smart defaults, never fabricated ones" — fixed by opening the sheet blank every time and keeping the button disabled (relabeled with what's missing) until an area and a comfort verdict are chosen; visual preference and notes stay optional. Covered by `detail.test.tsx` |
 | Freshly picked photo stayed invisible until remount | `FadeImage` (`UI.tsx`) reset its opacity to 0 in a passive `useEffect`. `setValue(0)` also cancels a running fade, and a just-copied local photo can finish loading before that deferred effect runs, so the reset cancelled the fade-in and left Add/Edit Garment's preview blank until the screen remounted | Violates #22's "never hide system state": the photo was saved but looked missing. Fixed by resetting in a layout effect, only on a real `uri` change. Any "reset an Animated value when the source changes" logic must not run later than the event it's resetting for |
 | Swipe flashed the previous screen, or left a blank one | `TopLevelSwipeNavigator.tsx` rendered the two-pane drag row and the settled view as the same unkeyed `Animated.View`, so React reused one native view across the swap, and the commit path reset the native-driven `translateX`/`baseX` to 0. Depending on timing, the reset either redrew the old pane for one frame (the flash users saw on device) or arrived after the view had detached from the drag animation, leaving it offset by a full screen width (a blank page that tab taps couldn't clear). Confirmed frame by frame with `adb screenrecord`: 6 of 12 swipes failed before the fix, 0 of 12 after | Violates the Motion language rule that motion clarifies and never misleads, and #22 (a blank screen hides state). Fixed by keying the two branches (`key="pair"`/`key="idle"`) so the settled view is always a fresh native view, and removing the reset entirely. Never `setValue` a native-driven value that a still-mounted view is reading, just to tidy up for a re-render that hasn't committed yet. Jest can't reproduce this (no native driver), so check swipe changes on a device or emulator |
+| "+ Add" reopened the last edit and Save overwrote that garment | `store.tsx`'s `go('addManual')` reset the draft only when it had no garment id. Editing loads a draft with the id set, and neither Back nor a successful edit cleared it, so a later "+ Add" opened that garment's data as if it were new, and Save went down the update path, overwriting it | Violates Measurement integrity's "never fabricate input" (the form showed values the user didn't type) and #22. Fixed by always resetting on `go('addManual')`, which only ever means "new garment" (edit and save-from-result set their own draft). Covered by `detail.test.tsx` |
 | Assuming every garment has at least one history entry | `ClosetScreen.tsx`'s `GarmentTile` read `g.history[g.history.length - 1].tone` unguarded. The normal save path always writes an initial "Added to closet" observation, but a restored backup (`observations: []` is valid) or a save interrupted between `insertGarment` and `insertObservation` leaves a garment with none — and the whole Closet then crashed on every open | Fails #1's "incomplete data" system test and Measurement integrity's spirit — a garment with no fit history must render as having none (no tone dot, no note), never crash and never invent a green "good" state. Covered by `closet.test.tsx` and `backup.test.tsx` |
 
 ## Quick self-check before calling a screen done

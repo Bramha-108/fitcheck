@@ -18,7 +18,7 @@ describe('Closet screen', () => {
     // No fake garments, no fabricated history.
     expect(screen.queryByLabelText(/size /)).toBeNull();
     await user.press(screen.getByRole('button', { name: 'Add your first garment' }));
-    expect(screen.getByText('Add a garment')).toBeTruthy();
+    expect(await screen.findByText('Garment details')).toBeTruthy(); // straight to the form
   });
 
   it('lists every saved garment, including very long names', async () => {

@@ -100,7 +100,7 @@ export default function ClosetScreen({ scrollRef }: { scrollRef?: React.RefObjec
       <View style={{ paddingHorizontal: SCREEN_PADDING, paddingTop: insets.top + SPACING.xl }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <Text style={styles.title}>Closet</Text>
-          <Pressable onPress={() => store.go('add')} style={styles.addPill} accessibilityRole="button" accessibilityLabel="Add garment">
+          <Pressable onPress={() => store.go('addManual')} style={styles.addPill} accessibilityRole="button" accessibilityLabel="Add garment">
             <Text style={styles.addPillText}>+ Add</Text>
           </Pressable>
         </View>
@@ -151,7 +151,7 @@ export default function ClosetScreen({ scrollRef }: { scrollRef?: React.RefObjec
           title="Your closet is empty"
           body="Add your first garment to start tracking fit and comparing new buys against it."
           primaryLabel="Add your first garment"
-          onPrimary={() => store.go('add')}
+          onPrimary={() => store.go('addManual')}
         />
       ) : items.length === 0 ? (
         <EmptyState
@@ -159,7 +159,7 @@ export default function ClosetScreen({ scrollRef }: { scrollRef?: React.RefObjec
           title={empty.title}
           body={empty.body}
           primaryLabel="Add a garment"
-          onPrimary={() => store.go('add')}
+          onPrimary={() => store.go('addManual')}
           secondaryLabel={empty.clearLabel}
           onSecondary={empty.onClear}
         />

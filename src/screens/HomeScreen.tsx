@@ -86,7 +86,7 @@ export default function HomeScreen({ scrollRef }: { scrollRef?: React.RefObject<
             )}
           </Pressable>
           <Pressable
-            onPress={() => store.go('add')}
+            onPress={() => store.go('addManual')}
             onPressIn={pressScaleAdd.onPressIn}
             onPressOut={pressScaleAdd.onPressOut}
             accessibilityRole="button"
