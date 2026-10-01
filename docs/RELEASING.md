@@ -132,3 +132,4 @@ permissions all check out. The manual steps below are the same process.
 |---|---|---|---|---|
 | 1.0.0 | 1 | `028d87d` (`v1.0.0`) | 2026-09-29 | First release. No update checker; users must install 1.1.0 manually once. |
 | 1.1.0 | 2 | see `v1.1.0` | 2026-10-01 | Adds the in-app update check (re-enables INTERNET), Outseam, and navigation/keyboard/photo/sheet fixes. |
+| 1.1.1 | 3 | see `v1.1.1` | 2026-10-01 | Fixes swipe navigation flashing the previous screen or leaving a blank one. First release reachable via the in-app update check. |
