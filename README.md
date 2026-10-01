@@ -9,11 +9,11 @@ means in plain language. No sizing predictions, no match percentages, no
 population averages — just your own data, honestly presented.
 
 It works fully offline: everything lives in a local SQLite database on your
-device. There's no account and no backend. The one network call in the app is
-an optional update check: a single request to this repo's GitHub Releases,
-made only when you tap **Check for updates** in Profile, or once a day if you
-turn on automatic checking (off by default). Nothing about your closet is
-ever sent.
+device. There's no account and no backend. The only network access in the app is
+an optional update check that asks this repo's GitHub Releases page for the
+latest version. It runs only when you tap **Check for updates** in Profile, or
+once a day if you turn on automatic checking (off by default). Nothing about
+your closet is ever sent.
 
 ## Screenshots
 

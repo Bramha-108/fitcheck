@@ -15,8 +15,8 @@ No server, no account/login, no cloud database, no cloud AI, no analytics, no re
 
 **Amended 2026-10-01: optional app-update check.** FitCheck is sideloaded from GitHub
 Releases. The one exception to "no remote API" is a check for a newer release. It makes a
-single anonymous GET for public release metadata, only when the user taps "Check for
-updates" in Profile or opts into a daily automatic check (off by default). No closet data is
+few anonymous requests to github.com for public release information, only when the user
+taps "Check for updates" in Profile or opts into a daily automatic check (off by default). No closet data is
 ever sent, the app still works fully offline, and installing is left to Android's own
 installer. See [DESIGN_GUIDELINES.md](../DESIGN_GUIDELINES.md)'s "App updates" section.
 

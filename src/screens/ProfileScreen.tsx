@@ -207,7 +207,9 @@ function AppUpdates() {
       : status === 'current'
         ? "You're on the latest version."
         : status === 'error'
-          ? "Couldn't reach GitHub. Check your connection and try again."
+          ? store.updateError === 'network'
+            ? "Couldn't reach GitHub. Check your connection and try again."
+            : "GitHub didn't answer with a release just now. Try again in a little while."
           : null;
 
   return (

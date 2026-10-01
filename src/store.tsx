@@ -28,7 +28,7 @@ import {
 import { deleteGarmentPhoto, localPhotoExists, pickGarmentPhoto } from './utils/photo';
 import { BackupFile, BackupParseError, buildBackupFile, pickBackupFile, shareBackupFile } from './utils/backup';
 import { convertDraftUnits, displayToCm, formatValue } from './utils/units';
-import { AUTO_CHECK_INTERVAL_MS, AvailableUpdate, fetchLatestRelease, isNewerVersion } from './utils/updateCheck';
+import { AUTO_CHECK_INTERVAL_MS, AvailableUpdate, UpdateCheckError, fetchLatestRelease, isNewerVersion } from './utils/updateCheck';
 
 export type Screen =
   | 'home' | 'closet' | 'detail' | 'add' | 'addManual'
@@ -239,6 +239,8 @@ interface Store {
    * only shows the App updates section when this is set. */
   installedVersion: string | null;
   updateStatus: UpdateStatus;
+  /** Why the last user-initiated check failed — only meaningful when updateStatus is 'error'. */
+  updateError: UpdateCheckError['kind'] | null;
   availableUpdate: AvailableUpdate | null;
   /** Opt-in, off by default: check GitHub at most once a day on launch. */
   autoUpdateCheck: boolean;
@@ -335,6 +337,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const dbRef = useRef<SQLiteDatabase | null>(null);
   const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
+  const [updateError, setUpdateError] = useState<UpdateCheckError['kind'] | null>(null);
   const [availableUpdate, setAvailableUpdateState] = useState<AvailableUpdate | null>(null);
   // Mirrors availableUpdate for async callbacks that outlive the render they
   // started in (a failed automatic check restores 'available' from this).
@@ -393,6 +396,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!INSTALLED_VERSION || checkingRef.current) return;
     checkingRef.current = true;
     setUpdateStatus('checking');
+    setUpdateError(null);
     try {
       const latest = await fetchLatestRelease();
       persistSetting(SETTING_LAST_UPDATE_CHECK, String(Date.now()));
@@ -405,7 +409,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setUpdateStatus('current');
         persistSetting(SETTING_AVAILABLE_UPDATE, '');
       }
-    } catch {
+    } catch (e) {
+      setUpdateError(e instanceof UpdateCheckError ? e.kind : 'server');
       setUpdateStatus(availableUpdateRef.current ? 'available' : userInitiated ? 'error' : 'idle');
     } finally {
       checkingRef.current = false;
@@ -1186,7 +1191,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     loadEditGarment, startGarmentFromResult, pickNgPhoto, deleteGarmentById,
     openSheet, closeSheet, setSheetArea, setSheetVerdict, setSheetLook, setSheetComfortNote, saveFit,
     backupBusy, exportBackup, importBackup,
-    installedVersion: INSTALLED_VERSION, updateStatus, availableUpdate, autoUpdateCheck, checkForUpdate, setAutoUpdateCheck, openUpdateDownload,
+    installedVersion: INSTALLED_VERSION, updateStatus, updateError, availableUpdate, autoUpdateCheck, checkForUpdate, setAutoUpdateCheck, openUpdateDownload,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

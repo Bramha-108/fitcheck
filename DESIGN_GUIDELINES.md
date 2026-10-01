@@ -543,9 +543,18 @@ the user a newer version exists. It never installs anything itself.
 
 - **The only network access in the app, and only on the user's say-so.** A tap
   on Profile's "Check for updates", or the opt-in daily check ("Check
-  automatically", off by default). `src/utils/updateCheck.ts` makes one GET
-  for public release metadata. Nothing about the closet is sent. Don't add any
-  other network use on the back of the INTERNET permission this needed.
+  automatically", off by default). `src/utils/updateCheck.ts` reads the version
+  off github.com's "latest release" redirect (HEAD requests), and falls back to
+  the REST API only if that fails. Nothing about the closet is sent. Don't add
+  any other network use on the back of the INTERNET permission this needed.
+- **Don't make the GitHub REST API the primary route.** Anonymous API calls
+  are capped at 60/hour per public IP, and mobile carriers put many phones
+  behind one shared IP. On mobile data the API alone was routinely refused
+  (403), which showed up as "Couldn't reach GitHub" for users whose connection
+  was fine. Verified on device with the API rate-limited: the web route still
+  finds the release. Errors also distinguish "couldn't reach GitHub" (offline)
+  from "GitHub answered but refused", so a refusal is never blamed on the
+  user's connection.
 - **A found update is a quiet line in Profile's App updates section, never a
   dot or badge.** No tab-bar dot, no Home nudge, no launch pop-up. The user
   sees it when they visit Profile. This follows "no badges", "honesty over

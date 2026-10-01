@@ -1,4 +1,4 @@
-import { isNewerVersion, parseLatestRelease, parseVersion } from '../updateCheck';
+import { isNewerVersion, parseLatestRelease, parseVersion, tagFromReleaseUrl } from '../updateCheck';
 
 describe('parseVersion()', () => {
   it('reads plain, v-prefixed, short and pre-release tags', () => {
@@ -68,5 +68,23 @@ describe('parseLatestRelease()', () => {
     expect(parseLatestRelease({ ...release, tag_name: 'nightly' })).toBeNull();
     expect(parseLatestRelease(null)).toBeNull();
     expect(parseLatestRelease({ message: 'Not Found' })).toBeNull();
+  });
+});
+
+describe('tagFromReleaseUrl()', () => {
+  it('reads the tag from the page "latest release" redirects to', () => {
+    expect(tagFromReleaseUrl('https://github.com/Bramha-108/fitcheck/releases/tag/v1.1.1')).toBe('v1.1.1');
+    expect(tagFromReleaseUrl('https://github.com/Bramha-108/fitcheck/releases/tag/1.2.0/')).toBe('1.2.0');
+  });
+
+  it('rejects anything that is not a github.com release-tag URL with a version', () => {
+    for (const u of [
+      'https://github.com/Bramha-108/fitcheck/releases', // no release published yet
+      'https://github.com/Bramha-108/fitcheck/releases/tag/nightly',
+      'https://evil.example/Bramha-108/fitcheck/releases/tag/v9.9.9',
+      'http://github.com/Bramha-108/fitcheck/releases/tag/v1.0.0',
+      '',
+      null,
+    ]) expect(tagFromReleaseUrl(u)).toBeNull();
   });
 });
