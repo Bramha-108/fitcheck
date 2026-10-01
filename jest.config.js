@@ -25,6 +25,10 @@ module.exports = {
       preset: 'jest-expo',
       testMatch: ['<rootDir>/src/**/__tests__/**/*.test.tsx'],
       setupFiles: ['react-native-gesture-handler/jestSetup'],
+      // Each test renders the whole <App /> and drives it like a user, so a single
+      // test takes ~0.5-2s alone. Under a full parallel run on a busy machine the
+      // slowest one sometimes crossed Jest's 5s default — a timeout, not a failure.
+      testTimeout: 15000,
     },
   ],
 };
