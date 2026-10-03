@@ -58,6 +58,9 @@ export default function ConfirmDialog({
         Animated.timing(opacity, { toValue: 1, duration, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
         Animated.timing(scale, { toValue: 1, duration, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]).start();
+    } else if (mounted && reduceMotion) {
+      // Nothing to animate: unmount now rather than on a 0ms animation's callback.
+      setMounted(false);
     } else if (mounted) {
       Animated.timing(opacity, { toValue: 0, duration, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
         if (finished) setMounted(false);

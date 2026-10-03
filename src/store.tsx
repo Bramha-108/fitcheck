@@ -470,6 +470,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2800);
   };
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
   // Real back-stack (not a fixed screen->screen map) so Back always lands on
   // wherever the user actually came from, however they got there — within a

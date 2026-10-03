@@ -26,7 +26,12 @@ export default function FitSheet() {
       setVisible(true);
       slide.setValue(reduceMotion ? 0 : SCREEN_H);
       Animated.timing(slide, { toValue: 0, duration, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-    } else {
+    } else if (visible && reduceMotion) {
+      // Nothing to animate: unmount now rather than on a 0ms animation's callback.
+      setVisible(false);
+    } else if (visible) {
+      // Only a sheet that's actually showing has a close to animate — not the
+      // initial mount, where sheetOpen starts false.
       Animated.timing(slide, { toValue: SCREEN_H, duration, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
         if (finished) setVisible(false);
       });
