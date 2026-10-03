@@ -78,4 +78,24 @@ describe('Top-level navigation', () => {
     expect(await pressHardwareBack()).toBe(true);
     expect(selectedTab()).toBe('Closet'); // the flow's origin, not FitCheck
   });
+
+  it('Back closes an open confirmation instead of leaving it over another screen', async () => {
+    await renderApp({ garments: [makeReference()] });
+    const user = userEvent.setup();
+
+    await tapTab('Closet');
+    await user.press(screen.getByLabelText(/Uniqlo Oxford Shirt/));
+    await user.press(await screen.findByRole('button', { name: 'Remove from closet' }));
+    expect(await screen.findByText('Remove garment?')).toBeTruthy();
+
+    // Previously Back navigated to Closet with "Remove garment?" still showing,
+    // and tapping Remove there deleted the garment out of context.
+    expect(await pressHardwareBack()).toBe(true);
+    expect(screen.queryByText('Remove garment?')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove from closet' })).toBeTruthy(); // still on Detail
+
+    expect(await pressHardwareBack()).toBe(true);
+    expect(selectedTab()).toBe('Closet');
+    expect(screen.queryByText('Remove garment?')).toBeNull();
+  });
 });

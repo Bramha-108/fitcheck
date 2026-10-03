@@ -26,11 +26,17 @@ jest.mock('expo-splash-screen', () => ({
 }));
 
 /** Screen-transition/entrance animations shouldn't make tests wait; the store and
- * screens already skip straight to their end state under reduced motion. */
+ * screens already skip straight to their end state under reduced motion. A test
+ * that covers an animated path turns it off with `setReducedMotion(false)` and
+ * back on in its own cleanup. */
+let mockReducedMotion = true;
 jest.mock('../../utils/motion', () => {
   const actual = jest.requireActual('../../utils/motion');
-  return { ...actual, useReducedMotion: () => true };
+  return { ...actual, useReducedMotion: () => mockReducedMotion };
 });
+export function setReducedMotion(on: boolean) {
+  mockReducedMotion = on;
+}
 
 export { __fake };
 

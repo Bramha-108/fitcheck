@@ -123,8 +123,18 @@ export default function DetailScreen() {
           duration: MOTION.delete,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
-        }).start(({ finished }) => {
-          if (finished) store.deleteGarmentById(g.id);
+        }).start(async ({ finished }) => {
+          if (!finished) return;
+          // The garment is still there if the delete failed — reverse the exit
+          // rather than leave an invisible screen behind the "try again" toast.
+          if (!(await store.deleteGarmentById(g.id))) {
+            Animated.timing(exitProgress, {
+              toValue: 1,
+              duration: MOTION.delete,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: true,
+            }).start();
+          }
         });
       },
     });

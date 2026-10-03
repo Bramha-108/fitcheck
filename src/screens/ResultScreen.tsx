@@ -13,6 +13,13 @@ function NoComparisonYet() {
   const store = useStore();
   const reason = store.noResultReason;
   const categoryLabel = (CATEGORY_LABELS.find(([cat]) => cat === store.fc.category)?.[1] ?? 'garments').toLowerCase();
+  // Opens the form on the category being compared (the user's own pick on the
+  // FitCheck form), not Add's blank default of Tops. Only the category carries
+  // over: the typed measurements describe the compared garment, not this one.
+  const addInCategory = () => {
+    store.go('addManual');
+    store.setNgCategory(store.fc.category);
+  };
 
   // Honest about which of the four real causes it is (empty closet, empty
   // category, no measurement entered, or entered measurements that just don't
@@ -40,14 +47,14 @@ function NoComparisonYet() {
               title: 'Nothing to compare yet',
               body: `You don't have any ${categoryLabel} saved yet. Add one you already know fits, then compare against it.`,
               primaryLabel: 'Add a garment',
-              onPrimary: () => store.go('addManual'),
+              onPrimary: addInCategory,
               showSecondary: true,
             }
           : {
               title: 'Nothing to compare yet',
               body: 'Your closet is empty — FitCheck needs at least one saved garment to find a fit you already know.',
               primaryLabel: 'Add your first garment',
-              onPrimary: () => store.go('addManual'),
+              onPrimary: addInCategory,
               showSecondary: true,
             };
 

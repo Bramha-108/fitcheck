@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Screen, useStore } from '../store';
@@ -64,6 +64,17 @@ export default function TopLevelSwipeNavigator() {
   // this, its onUpdate would compute directions/targets against the stale
   // pre-commit screen, one step behind what's actually on screen mid-transition.
   const pendingScreenRef = useRef<Screen | null>(null);
+  // A commit lands when its settle animation ends, ~MOTION.nav after release. A
+  // tap in that window (a tab, a garment tile in the incoming pane) navigates on
+  // its own, and the commit must not override it: tapping a tile used to open
+  // Detail and then get yanked back to Closet. Opening Detail unmounts this
+  // navigator, hence the mounted check alongside the screen check.
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+  // Whether the current touch ever became a pan. A tap also runs this gesture's
+  // begin/finalize (it just never activates), and must not trigger the
+  // interrupted-gesture cleanup in onFinalize below.
+  const activatedRef = useRef(false);
   // Refs into each top-level screen's own outer ScrollView, so the pan gesture
   // below can be marked simultaneous with them. Without this, web's gesture-handler
   // implementation lets whichever recognizer notices pointer movement first win
@@ -111,6 +122,9 @@ export default function TopLevelSwipeNavigator() {
     .activeOffsetX([-12, 12])
     .failOffsetY([-10, 10])
     .simultaneousWithExternalGesture(homeScrollRef, closetScrollRef, fitcheckScrollRef, profileScrollRef)
+    .onStart(() => {
+      activatedRef.current = true;
+    })
     .onUpdate((e) => {
       const w = widthRef.current;
       // A commit still in flight counts as "already there" for a new gesture's
@@ -150,13 +164,20 @@ export default function TopLevelSwipeNavigator() {
         // begins mid-settle already sees where this one is headed — see
         // pendingScreenRef's declaration above.
         pendingScreenRef.current = d.screen;
+        const origin = screenRef.current;
         settle(toValue, (finished) => {
           // A new gesture interrupted this settle (its onUpdate called .setValue
           // on `translateX` before we got here) — it already owns dragRef/drag by
           // now, so clearing or reassigning either from here would stomp on it.
           // That new gesture's own onEnd is what gets to finish this job.
           if (!finished) return;
+          if (!mountedRef.current) return;
           clearDrag();
+          if (screenRef.current !== origin) {
+            // Something else navigated mid-settle (see mountedRef): the user's tap wins.
+            pendingScreenRef.current = null;
+            return;
+          }
           store.go(d.screen);
           pendingScreenRef.current = null;
           // Deliberately NOT resetting translateX/baseX here. These are native-driven,
@@ -178,7 +199,12 @@ export default function TopLevelSwipeNavigator() {
     // never fire in that case, which would otherwise strand the screen mid-drag,
     // or leave an edge-resistance nudge stuck off-center.
     .onFinalize((_e, success) => {
-      if (success) return;
+      const activated = activatedRef.current;
+      activatedRef.current = false;
+      // A tap never activated, so there's nothing of its own to clean up. Running
+      // the cleanup anyway reversed a swipe that was still settling: a tap anywhere
+      // on screen in the ~MOTION.nav after release sprang it back to where it started.
+      if (success || !activated) return;
       settleEdge(0);
       if (dragRef.current) settle(0, (finished) => { if (finished) clearDrag(); });
     });

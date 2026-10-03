@@ -218,7 +218,9 @@ interface Store {
   loadEditGarment: (id: number) => void;
   startGarmentFromResult: () => void;
   pickNgPhoto: () => Promise<void>;
-  deleteGarmentById: (id: number) => Promise<void>;
+  /** Resolves false on a failed delete — Detail has already faded itself out by
+   * then and must bring the garment back rather than stay invisible. */
+  deleteGarmentById: (id: number) => Promise<boolean>;
 
   openSheet: () => void;
   closeSheet: () => void;
@@ -530,6 +532,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // to the platform default (exit) once we're actually at the home root.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // An open confirmation is the topmost thing on screen, so Back dismisses it
+      // (as Cancel would). Navigating underneath it instead left "Remove garment?"
+      // showing over Closet, where Remove still deleted a garment out of context.
+      if (confirmRequest) {
+        setConfirmRequest(null);
+        return true;
+      }
       // Onboarding is a linear, forward-only wizard with no in-flow back button
       // (matching the design) — hardware back dismisses it the same way "Explore
       // first"/"Skip" does, rather than stepping backward through it or exiting.
@@ -552,7 +561,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return false;
     });
     return () => sub.remove();
-  }, [obStep, sheetOpen, history, screen]);
+  }, [confirmRequest, obStep, sheetOpen, history, screen]);
   // Fit-type vocabulary is category-specific (FITS.pants !== FITS.tops), so switching the
   // top-level category/mode filter clears any fit-type refinement rather than leaving a
   // now-meaningless selection active.
@@ -899,9 +908,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const deleteGarmentById = async (id: number) => {
+  const deleteGarmentById = async (id: number): Promise<boolean> => {
     const db = dbRef.current;
-    if (!db) return;
+    if (!db) return false;
     const snapshot = garments.find((x) => x.id === id) ?? null;
     setJustDeletedGarment(snapshot);
     try {
@@ -913,12 +922,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       await refresh();
       finishFlowTo('closet');
       showToast('Garment removed.');
+      return true;
     } catch {
       // The garment is still there — undo the optimistic exit-animation
       // snapshot above so Closet doesn't render a ghost tile for a delete
       // that never actually happened.
       setJustDeletedGarment(null);
       showToast("Couldn't remove that — try again.");
+      return false;
     }
   };
 
@@ -1096,7 +1107,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // An entry means "this area felt like this" — both are required (FitSheet
     // keeps its button disabled until then; this is the backstop).
     if (!sArea || !sVerdict) return;
-    setSheetOpen(false);
     // A typed note replaces the templated one (spec.md Feature 1: "a quick tag ...
     // plus optional free text") rather than sitting alongside it — the templated
     // version is just a sensible default when the user doesn't want to type anything.
@@ -1109,6 +1119,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         comfort: [{ area: sArea, verdict: sVerdict as any }],
         visual: sLook.trim() || undefined,
       });
+      // Closed only once the entry is saved: on failure the sheet stays open with
+      // the picks intact, so "try again" means one tap rather than starting over
+      // (openSheet starts every new entry blank).
+      setSheetOpen(false);
       setSComfortNote('');
       await refresh();
       showToast('Added to fit history — earlier entries kept.');

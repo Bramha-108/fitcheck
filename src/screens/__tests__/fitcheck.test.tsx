@@ -42,6 +42,20 @@ describe('FitCheck entry + Result', () => {
     expect(await screen.findByText(/You don't have any pants saved yet/)).toBeTruthy();
   });
 
+  it('"Add a garment" from an empty category opens the form on that category, with nothing typed', async () => {
+    const user = await openFitCheck({ garments: [makeReference()] });
+    await user.press(screen.getByRole('button', { name: 'Pants' }));
+    await user.type(screen.getByLabelText('Waist'), '82');
+    await compare(user);
+    await user.press(await screen.findByRole('button', { name: 'Add a garment' }));
+
+    await screen.findByRole('button', { name: 'Save to closet' });
+    expect(screen.getByRole('button', { name: 'Pants' }).props.accessibilityState?.selected).toBe(true);
+    // The compared garment's measurements describe a different garment, not the
+    // one being added, so none of them carry over.
+    expect(screen.getByLabelText('Waist').props.value ?? '').toBe('');
+  });
+
   it('nothing entered: asks for a measurement rather than comparing against invented ones', async () => {
     const user = await openFitCheck({ garments: [makeReference()] });
     await compare(user);

@@ -1,4 +1,6 @@
-import { renderApp, screen, userEvent, makeReference, __fake } from './testUtils';
+import { Animated } from 'react-native';
+import { MOTION } from '../../utils/motion';
+import { renderApp, screen, setReducedMotion, userEvent, waitFor, makeReference, __fake } from './testUtils';
 
 jest.mock('../../db', () => require('./fakeDb'));
 jest.mock('../../utils/photo', () => require('./nativeMocks').photo);
@@ -87,6 +89,14 @@ describe('Garment detail', () => {
     await user.press(screen.getByRole('button', { name: 'Add to fit history' }));
     expect(await screen.findByText("Couldn't save that update — try again.")).toBeTruthy();
     expect(__fake.snapshot().observations).toEqual(before.observations);
+
+    // "Try again" has to be possible: the sheet stays open with the picks intact,
+    // rather than closing and starting blank on the next open.
+    expect(screen.getByRole('button', { name: 'Chest' }).props.accessibilityState?.selected).toBe(true);
+    expect(screen.getByRole('button', { name: 'Loose' }).props.accessibilityState?.selected).toBe(true);
+    await user.press(screen.getByRole('button', { name: 'Add to fit history' }));
+    expect(await screen.findByText('Added to fit history — earlier entries kept.')).toBeTruthy();
+    expect(__fake.snapshot().observations).toHaveLength(before.observations.length + 1);
   });
 
   it('removing a garment asks first, says it cannot be undone, and Cancel keeps it', async () => {
@@ -96,6 +106,29 @@ describe('Garment detail', () => {
     expect(screen.getByText(/can't be undone/)).toBeTruthy();
     await user.press(screen.getByText('Cancel'));
     expect(__fake.snapshot().garments).toHaveLength(1);
+  });
+
+  it('a failed removal fades the garment back in instead of leaving an invisible screen', async () => {
+    setReducedMotion(false); // the fade-out only runs on the animated path
+    // These are native-driver animations, which Jest runs (callbacks fire) without
+    // ever updating rendered opacity, so the fade itself is checked on a device.
+    // What Jest can check: the value that faded the screen out is animated back to 1.
+    const timing = jest.spyOn(Animated, 'timing');
+    try {
+      const user = await openDetail({ garments: [makeReference()] });
+      __fake.failNext('deleteGarment');
+      await user.press(screen.getByRole('button', { name: 'Remove from closet' }));
+      await user.press(await screen.findByText('Remove'));
+
+      expect(await screen.findByText("Couldn't remove that — try again.")).toBeTruthy();
+      expect(__fake.snapshot().garments).toHaveLength(1);
+      const exit = timing.mock.calls.find(([, c]) => c.toValue === 0 && c.duration === MOTION.delete);
+      expect(exit).toBeTruthy();
+      await waitFor(() => expect(timing.mock.calls.some(([v, c]) => v === exit![0] && c.toValue === 1)).toBe(true));
+    } finally {
+      timing.mockRestore();
+      setReducedMotion(true);
+    }
   });
 
   it('confirming removal deletes the garment and its history, then lands on an honest empty closet', async () => {
