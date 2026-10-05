@@ -165,4 +165,34 @@ describe('Add garment (manual entry)', () => {
     await fireEvent(preview('file:///app/photos/g-2.jpg'), 'load');
     expect(opacityOf('file:///app/photos/g-2.jpg')).toBe(1);
   });
+  it('a save lands on a Closet that shows the new garment, even after an earlier search', async () => {
+    const user = await openAddManual({ garments: [makeReference({ brand: "Levi's", name: '501 Jeans' })] });
+    await user.press(screen.getByText('← Back'));
+    await user.type(screen.getByLabelText('Search closet'), 'levi');
+    await user.press(screen.getByRole('button', { name: 'Add garment' }));
+    await user.type(screen.getByLabelText('Brand'), 'Uniqlo');
+    await user.type(screen.getByLabelText('Product name'), 'Linen Shirt');
+    await user.type(screen.getByLabelText('Size'), 'L');
+    await user.type(screen.getByLabelText('Chest'), '56');
+    await user.press(screen.getByRole('button', { name: 'Save to closet' }));
+
+    expect(await screen.findByLabelText(/Uniqlo Linen Shirt, tops, size L/)).toBeTruthy();
+    expect(screen.getByLabelText('Search closet').props.value).toBe('');
+  });
+
+  it('a double-tap on Save adds the garment once', async () => {
+    const user = await openAddManual();
+    await user.type(screen.getByLabelText('Brand'), 'Uniqlo');
+    await user.type(screen.getByLabelText('Product name'), 'Linen Shirt');
+    await user.type(screen.getByLabelText('Size'), 'L');
+    await user.type(screen.getByLabelText('Chest'), '56');
+    // The first save's write is still in flight when the second tap lands.
+    const release = __fake.holdNext('insertGarment');
+    await user.press(screen.getByRole('button', { name: 'Save to closet' }));
+    await user.press(screen.getByRole('button', { name: 'Save to closet' }));
+    release();
+
+    expect(await screen.findByLabelText(/Uniqlo Linen Shirt, tops, size L/)).toBeTruthy();
+    expect(__fake.snapshot().garments).toHaveLength(1);
+  });
 });

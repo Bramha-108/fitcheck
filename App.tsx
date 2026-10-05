@@ -70,8 +70,10 @@ function ScreenEnter({ children }: { children: React.ReactNode }) {
 function CurrentScreen() {
   const store = useStore();
   switch (store.screen) {
-    case 'detail': return <ScreenEnter><DetailScreen /></ScreenEnter>;
-    case 'addManual': return <ScreenEnter><AddManualScreen /></ScreenEnter>;
+    // Keyed so Detail → Edit (and back) remounts ScreenEnter and plays its
+    // entrance; unkeyed, React reused the wrapper with its animation already done.
+    case 'detail': return <ScreenEnter key="detail"><DetailScreen /></ScreenEnter>;
+    case 'addManual': return <ScreenEnter key="addManual"><AddManualScreen /></ScreenEnter>;
     case 'result': return <ResultScreen />;
     default: return <TopLevelSwipeNavigator />;
   }

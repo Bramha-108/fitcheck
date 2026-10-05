@@ -108,6 +108,22 @@ describe('Garment detail', () => {
     expect(__fake.snapshot().garments).toHaveLength(1);
   });
 
+  it('a double-tap on "Add to fit history" adds one entry', async () => {
+    const user = await openDetail({ garments: [makeReference()] });
+    const before = __fake.snapshot().observations.length;
+    await user.press(screen.getByRole('button', { name: 'Update how it fits' }));
+    await user.press(await screen.findByRole('button', { name: 'Chest' }));
+    await user.press(screen.getByRole('button', { name: 'Tight' }));
+    // The first save's write is still in flight when the second tap lands.
+    const release = __fake.holdNext('insertObservation');
+    await user.press(screen.getByRole('button', { name: 'Add to fit history' }));
+    await user.press(screen.getByRole('button', { name: 'Add to fit history' }));
+    release();
+
+    expect(await screen.findByText('Added to fit history — earlier entries kept.')).toBeTruthy();
+    expect(__fake.snapshot().observations).toHaveLength(before + 1);
+  });
+
   it('a closing confirmation keeps its own text while it fades, never a blank "Confirm" box', async () => {
     setReducedMotion(false); // the fade-out only runs on the animated path
     try {

@@ -7,7 +7,7 @@ import { Chip, PrimaryButton, UnitToggle, toneColor } from './UI';
 import { CATEGORY_LABELS, FEEL, TOLERANCE, keysFor, obTagsFor } from '../data/constants';
 import { toneFor } from '../engine/compare';
 import { Category, OnboardingStep } from '../types';
-import { cmToDisplay, formatDelta, formatMeasurement } from '../utils/units';
+import { cmToDisplay, displayToCm, formatDelta, formatMeasurement, formatValue } from '../utils/units';
 import { useShake } from '../utils/motion';
 
 // Same honest-sentinel pattern as AddManualScreen.tsx — a value the user
@@ -226,7 +226,7 @@ function Form() {
                     onChangeText={(v) => store.obSetM(key, v)}
                     onFocus={() => store.obFocusM(key)}
                     onBlur={store.obBlurM}
-                    placeholder={obSuggested?.m?.[key] ?? '—'}
+                    placeholder={obSuggested?.m?.[key] ? formatValue(Number(obSuggested.m[key]), units) : '—'}
                     placeholderTextColor={COLORS.faintest}
                     keyboardType="numeric"
                     style={styles.measureRowInput}
@@ -468,7 +468,8 @@ function Aha() {
       .filter((k) => (ob2[k] ?? '').trim() !== '')
       .map((k) => {
         const refVal = ref.m[k as keyof typeof ref.m] as number;
-        const v = Number(ob2[k]) - refVal;
+        // ob2 holds what was typed, in the active unit; the reference is stored in cm.
+        const v = displayToCm(Number(ob2[k]), units) - refVal;
         const tol = TOLERANCE[k as keyof typeof TOLERANCE] ?? 3;
         const tone = toneFor(Math.abs(v), tol);
         const mag = Math.min(1, Math.abs(v) / (tol * 2));

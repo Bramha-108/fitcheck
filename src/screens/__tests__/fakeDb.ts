@@ -43,6 +43,16 @@ const fresh = (): State => ({
 
 let state: State = fresh();
 
+/** Writes held open by `__fake.holdNext`, so a test can act while one is in flight. */
+let holds: Record<string, Promise<void>> = {};
+const held = async (op: string) => {
+  const h = holds[op];
+  if (h) {
+    delete holds[op];
+    await h;
+  }
+};
+
 const guard = (op: string) => {
   if (state.failAlways === op || state.failNext === op) {
     state.failNext = null;
@@ -56,6 +66,7 @@ export interface SeedGarment extends GarmentCore { observations?: Array<{ at: nu
 export const __fake = {
   reset(seed: { garments?: SeedGarment[]; body?: Array<{ at: number; m: BodyMeasurements }>; units?: Units; onboarded?: boolean; settings?: Record<string, string> } = {}) {
     state = fresh();
+    holds = {};
     state.units = seed.units ?? 'cm';
     state.onboarded = seed.onboarded ?? true;
     state.settings = { ...seed.settings };
@@ -67,6 +78,12 @@ export const __fake = {
   },
   failNext(op: string) { state.failNext = op; },
   failAlways(op: string | null) { state.failAlways = op; },
+  /** Makes the next call to the named write wait until the returned release() is called — like a slow device. */
+  holdNext(op: string): () => void {
+    let release!: () => void;
+    holds[op] = new Promise<void>((r) => { release = r; });
+    return release;
+  },
   snapshot: () => ({
     garments: state.garments.map((g) => ({ ...g })),
     observations: state.observations.map((o) => ({ ...o })),
@@ -95,6 +112,7 @@ export async function loadGarments(): Promise<Garment[]> {
 
 export async function insertGarment(_db: unknown, g: Garment) {
   guard('insertGarment');
+  await held('insertGarment');
   state.garments.push(toCore(g));
 }
 
@@ -127,6 +145,7 @@ export async function replaceAllData(
 
 export async function insertObservation(_db: unknown, o: Omit<FitObservation, 'id'>) {
   guard('insertObservation');
+  await held('insertObservation');
   const id = state.nextObsId++;
   state.observations.push({ id, ...o });
   return id;

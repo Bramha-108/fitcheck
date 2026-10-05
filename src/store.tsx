@@ -350,6 +350,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
   const [autoUpdateCheck, setAutoUpdateCheckState] = useState(false);
   const checkingRef = useRef(false);
+  // A save's button stays tappable until its writes finish and the screen moves
+  // on, so a quick double-tap used to run the whole save twice: two identical
+  // garments, or two identical fit-history entries. Saves already in flight
+  // ignore a second tap.
+  const savingRef = useRef(false);
+  const saveOnce = async <T,>(busy: T, write: () => Promise<T>): Promise<T> => {
+    if (savingRef.current) return busy;
+    savingRef.current = true;
+    try {
+      return await write();
+    } finally {
+      savingRef.current = false;
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -607,7 +621,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // Entirely separate from garment fit data — a personal log the user can keep if
   // they want one, not something FitCheck's matching reads from (see the note on
   // BodyMeasurement in src/types/index.ts for why).
-  const saveBodyMeasurement = async (m: Record<string, string>): Promise<boolean> => {
+  const saveBodyMeasurement = (m: Record<string, string>): Promise<boolean> => saveOnce(false, async () => {
     const db = dbRef.current;
     if (!db) return false;
     const cm: Record<string, number> = {};
@@ -630,7 +644,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       showToast("Couldn't save that — try again.");
       return false;
     }
-  };
+  });
 
   const deleteBodyMeasurementEntry = async (id: number) => {
     const db = dbRef.current;
@@ -795,7 +809,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return Object.keys(errors).length ? errors : null;
   };
 
-  const saveGarment = async () => {
+  const saveGarment = () => saveOnce(undefined, async () => {
     const db = dbRef.current;
     if (!db) return;
 
@@ -899,14 +913,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // (e.g. Pants → Slim) would otherwise keep silently filtering this list
       // with no chip visible to explain or clear it, since fit chips only
       // render for the Tops/Pants/Jackets filters, not "Recently added".
+      // The search goes too: an earlier search the new garment doesn't match
+      // would hide the very garment this lands on Closet to show.
       setFilterState('Recently added');
       setClosetFitState(null);
+      setClosetSearchState('');
       showToast(`Saved. That makes ${count} garments — your ${ng.category} comparisons just got stronger.`);
       setNgState(EMPTY_NG);
     } catch {
       showToast("Couldn't save — try again.");
     }
-  };
+  });
 
   const deleteGarmentById = async (id: number): Promise<boolean> => {
     const db = dbRef.current;
@@ -952,6 +969,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // result is offered as a ghost placeholder on the form below, never written
     // into `ob` as if the user had actually typed or confirmed it.
     if (key !== 'manual') {
+      // Measurements in cm, like every stored value — Form shows them in the active unit.
       setObSuggested({ brand: 'Uniqlo', name: 'Linen Blend Shirt', size: 'L', m: { chest: '54', shoulder: '45', length: '70' } });
       showToast(key === 'photo' ? 'Read from your photo — on device.' : 'Read from your screenshot — on device.');
     } else {
@@ -1007,7 +1025,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // the user actually measured logged as Good). "Okay"/"doesn't fit" can't be
   // translated to a direction (tight vs. loose) without guessing, so those are
   // recorded as a note only, never fabricated per-zone verdicts.
-  const obSaveFit = async () => {
+  const obSaveFit = () => saveOnce(undefined, async () => {
     const db = dbRef.current;
     if (!db) return;
     // brand/name/size are guaranteed non-empty here — obSaveGarment already
@@ -1060,7 +1078,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } catch {
       showToast("Couldn't save — try again.");
     }
-  };
+  });
 
   const obToCompare = () => setObStep('new');
   const obSet2M = (k: string, v: string) => setOb2State((s) => ({ ...s, [k]: sanitizeNumeric(v) }));
@@ -1101,7 +1119,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const setSheetVerdict = (v: string) => setSVerdict(v);
   const setSheetLook = (v: string) => setSLook(v);
   const setSheetComfortNote = (v: string) => setSComfortNote(v);
-  const saveFit = async () => {
+  const saveFit = () => saveOnce(undefined, async () => {
     const db = dbRef.current;
     if (!db) return;
     // An entry means "this area felt like this" — both are required (FitSheet
@@ -1129,7 +1147,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } catch {
       showToast("Couldn't save that update — try again.");
     }
-  };
+  });
 
   // Backup file never carries a real photo — a device swap/reinstall never has the
   // original file on disk at that path, and a same-device re-import might not
