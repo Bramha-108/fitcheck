@@ -108,6 +108,24 @@ describe('Garment detail', () => {
     expect(__fake.snapshot().garments).toHaveLength(1);
   });
 
+  it('a closing confirmation keeps its own text while it fades, never a blank "Confirm" box', async () => {
+    setReducedMotion(false); // the fade-out only runs on the animated path
+    try {
+      const user = await openDetail({ garments: [makeReference()] });
+      await user.press(screen.getByRole('button', { name: 'Remove from closet' }));
+      await screen.findByText('Remove garment?');
+      await user.press(screen.getAllByRole('button', { name: 'Cancel' }).slice(-1)[0]);
+
+      // Mid-fade: previously the dialog lost its title/message and fell back to
+      // the default "Confirm" label for the length of the fade.
+      expect(screen.queryByText('Confirm')).toBeNull();
+      await waitFor(() => expect(screen.queryByText('Remove garment?')).toBeNull());
+      expect(__fake.snapshot().garments).toHaveLength(1);
+    } finally {
+      setReducedMotion(true);
+    }
+  });
+
   it('a failed removal fades the garment back in instead of leaving an invisible screen', async () => {
     setReducedMotion(false); // the fade-out only runs on the animated path
     // These are native-driver animations, which Jest runs (callbacks fire) without

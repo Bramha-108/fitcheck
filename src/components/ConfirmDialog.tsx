@@ -69,15 +69,22 @@ export default function ConfirmDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  // The request is cleared the moment the dialog closes, but it stays mounted to
+  // fade out. Keep showing what it said while open: rendering the cleared props
+  // flashed an empty box with a generic "Confirm" button for the whole fade.
+  const shown = useRef({ title, message, cancelLabel, confirmLabel, destructive });
+  if (visible) shown.current = { title, message, cancelLabel, confirmLabel, destructive };
+
   if (!mounted) return null;
 
   return (
-    <View style={StyleSheet.absoluteFill}>
-      <Pressable style={styles.backdrop} onPress={onCancel} accessibilityRole="button" accessibilityLabel={cancelLabel} />
+    // Not tappable while fading out: the request it would act on is already gone.
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: visible ? 'auto' : 'none' }]}>
+      <Pressable style={styles.backdrop} onPress={onCancel} accessibilityRole="button" accessibilityLabel={shown.current.cancelLabel} />
       <View style={[styles.centerWrap, { pointerEvents: 'box-none' }]}>
         <Animated.View style={[styles.card, { opacity, transform: [{ scale }] }]} accessibilityViewIsModal>
-          <Text accessibilityRole="header" style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
+          <Text accessibilityRole="header" style={styles.title}>{shown.current.title}</Text>
+          <Text style={styles.message}>{shown.current.message}</Text>
           <View style={styles.actions}>
             <Pressable
               onPress={onCancel}
@@ -85,19 +92,19 @@ export default function ConfirmDialog({
               style={({ pressed }) => [styles.btn, styles.cancelBtn, pressed && { backgroundColor: '#EFEDE7' }]}
               accessibilityRole="button"
             >
-              <Text style={styles.cancelText}>{cancelLabel}</Text>
+              <Text style={styles.cancelText}>{shown.current.cancelLabel}</Text>
             </Pressable>
             <Pressable
               onPress={onConfirm}
               hitSlop={4}
               style={({ pressed }) => [
                 styles.btn,
-                destructive ? styles.destructiveBtn : styles.confirmBtn,
+                shown.current.destructive ? styles.destructiveBtn : styles.confirmBtn,
                 pressed && { opacity: 0.85 },
               ]}
               accessibilityRole="button"
             >
-              <Text style={styles.confirmText}>{confirmLabel}</Text>
+              <Text style={styles.confirmText}>{shown.current.confirmLabel}</Text>
             </Pressable>
           </View>
         </Animated.View>

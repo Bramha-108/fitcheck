@@ -57,3 +57,6 @@ keystore.properties
 
 # Claude Code local config and project skills (release-apk skill lives here)
 .claude/
+
+# skills installer lockfile (local tooling, like .claude/)
+skills-lock.json
